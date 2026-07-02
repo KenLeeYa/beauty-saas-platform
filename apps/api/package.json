@@ -1,0 +1,28 @@
+{
+  "name": "@beauty-saas/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@beauty-saas/authorization": "workspace:*",
+    "@beauty-saas/config": "workspace:*",
+    "@beauty-saas/shared": "workspace:*",
+    "@beauty-saas/validation": "workspace:*",
+    "@nestjs/common": "^11.1.3",
+    "@nestjs/core": "^11.1.3",
+    "@nestjs/platform-express": "^11.1.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

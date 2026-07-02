@@ -1,0 +1,21 @@
+{
+  "name": "beauty-saas-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Beauty SaaS Platform monorepo for a multi-tenant beauty business management system.",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "build": "turbo run build --cache=local:r",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint --cache=local:r",
+    "test": "turbo run test --cache=local:r",
+    "typecheck": "turbo run typecheck --cache=local:r"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "tsx": "^4.20.3",
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
