@@ -7,6 +7,10 @@
   "scripts": {
     "build": "turbo run build --cache=local:r",
     "dev": "turbo run dev --parallel",
+    "local:setup": "powershell -ExecutionPolicy Bypass -File scripts/dev/setup-local.ps1",
+    "local:start": "powershell -ExecutionPolicy Bypass -File scripts/dev/start-local.ps1",
+    "local:status": "powershell -ExecutionPolicy Bypass -File scripts/dev/status-local.ps1",
+    "local:stop": "powershell -ExecutionPolicy Bypass -File scripts/dev/stop-local.ps1",
     "lint": "turbo run lint --cache=local:r",
     "test": "turbo run test --cache=local:r",
     "typecheck": "turbo run typecheck --cache=local:r"
