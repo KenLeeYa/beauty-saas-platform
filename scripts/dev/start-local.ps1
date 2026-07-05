@@ -19,6 +19,14 @@ if (Test-Path -LiteralPath $pidFile) {
   Write-Host "Existing pid file found. Run pnpm local:stop first if you need a clean restart."
 }
 
+Stop-LocalPortOwners -Ports @(3000, 4000)
+
+$nextCache = Join-Path $root "apps\web\.next"
+if (Test-Path -LiteralPath $nextCache) {
+  Write-Host "Removing stale Next.js cache..."
+  Remove-Item -LiteralPath $nextCache -Recurse -Force
+}
+
 Write-Host "Starting API on http://127.0.0.1:4000 ..."
 $apiProcess = Start-Process `
   -FilePath $pnpm `

@@ -21,7 +21,23 @@ Write-Host "api /health/live: $apiStatus"
 
 Write-Host ""
 Write-Host "Docker services:"
-docker compose ps
+try {
+  $dockerJob = Start-Job -ScriptBlock {
+    Set-Location $using:root
+    docker compose ps
+  }
+
+  if (Wait-Job $dockerJob -Timeout 8) {
+    Receive-Job $dockerJob
+  } else {
+    Stop-Job $dockerJob
+    Write-Host "Docker status check timed out. Services may still be running; try 'docker compose ps' directly."
+  }
+} finally {
+  if ($dockerJob) {
+    Remove-Job $dockerJob -Force -ErrorAction SilentlyContinue
+  }
+}
 
 Write-Host ""
 Write-Host "Logs: $logDir"

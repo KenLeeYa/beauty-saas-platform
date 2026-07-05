@@ -58,3 +58,17 @@ function Test-HttpEndpoint {
     return $null
   }
 }
+
+function Stop-LocalPortOwners {
+  param([Parameter(Mandatory = $true)][int[]]$Ports)
+
+  Get-NetTCPConnection -LocalPort $Ports -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique |
+    ForEach-Object {
+      $process = Get-Process -Id $_ -ErrorAction SilentlyContinue
+      if ($process) {
+        Stop-Process -Id $_ -Force
+        Write-Host "Stopped port owner process $_"
+      }
+    }
+}
