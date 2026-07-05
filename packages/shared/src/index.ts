@@ -93,6 +93,73 @@ export type TenantSummary = {
   timezone: string;
 };
 
+export type PublicBookingTenant = {
+  id: string;
+  slug: string;
+  name: string;
+  industryType: IndustryType;
+  timezone: string;
+  bookingNotice: string;
+};
+
+export type PublicBookingBranch = {
+  id: string;
+  name: string;
+  address: string;
+  phone: string;
+  timezone: string;
+};
+
+export type PublicBookingServiceItem = {
+  id: string;
+  name: string;
+  category: string;
+  durationMinutes: number;
+  price: number;
+  description: string;
+};
+
+export type PublicBookingStaff = {
+  id: string;
+  name: string;
+  title: string;
+};
+
+export type PublicBookingDate = {
+  date: string;
+  label: string;
+  slots: string[];
+};
+
+export type PublicBookingOptions = {
+  tenant: PublicBookingTenant;
+  branches: PublicBookingBranch[];
+  services: PublicBookingServiceItem[];
+  staff: PublicBookingStaff[];
+  availableDates: PublicBookingDate[];
+};
+
+export type PublicBooking = {
+  id: string;
+  tenantId: string;
+  branch: PublicBookingBranch;
+  service: PublicBookingServiceItem;
+  staff: PublicBookingStaff;
+  customer: {
+    name: string;
+    phone: string;
+    email?: string;
+    note?: string;
+  };
+  appointment: {
+    date: string;
+    time: string;
+    durationMinutes: number;
+    status: "PENDING_CONFIRMATION" | "CONFIRMED";
+  };
+  createdAt: string;
+};
+
 export type ApiSuccess<TData, TMeta = Record<string, never>> = {
   success: true;
   data: TData;
