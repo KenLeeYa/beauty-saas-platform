@@ -61,6 +61,9 @@ export const permissionKeys = [
 ] as const;
 export type PermissionKey = (typeof permissionKeys)[number];
 
+export const appointmentStatuses = ["PENDING_CONFIRMATION", "CONFIRMED", "COMPLETED", "CANCELLED", "NO_SHOW"] as const;
+export type PublicBookingAppointmentStatus = (typeof appointmentStatuses)[number];
+
 export type TenantRole =
   | "TENANT_OWNER"
   | "TENANT_ADMIN"
@@ -155,7 +158,9 @@ export type PublicBooking = {
     date: string;
     time: string;
     durationMinutes: number;
-    status: "PENDING_CONFIRMATION" | "CONFIRMED";
+    status: PublicBookingAppointmentStatus;
+    statusNote?: string;
+    updatedAt?: string;
   };
   createdAt: string;
 };

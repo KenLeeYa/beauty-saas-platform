@@ -64,6 +64,7 @@ function Stop-LocalPortOwners {
 
   Get-NetTCPConnection -LocalPort $Ports -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty OwningProcess -Unique |
+    Where-Object { $_ -gt 0 } |
     ForEach-Object {
       $process = Get-Process -Id $_ -ErrorAction SilentlyContinue
       if ($process) {

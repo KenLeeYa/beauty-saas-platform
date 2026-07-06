@@ -1,6 +1,13 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import type { PublicBooking, PublicBookingOptions } from "@beauty-saas/shared";
-import type { CreatePublicBookingInput } from "@beauty-saas/validation";
+import type { PublicBooking, PublicBookingAppointmentStatus, PublicBookingOptions } from "@beauty-saas/shared";
+import type { CreatePublicBookingInput, UpdateAppointmentStatusInput } from "@beauty-saas/validation";
+
+type AppointmentListFilters = {
+  branchId?: string;
+  staffId?: string;
+  status?: PublicBookingAppointmentStatus;
+  date?: string;
+};
 
 const massageTenant: PublicBookingOptions = {
   tenant: {
@@ -139,5 +146,43 @@ export class PublicBookingService {
 
     bookings.set(booking.id, booking);
     return booking;
+  }
+
+  listBookings(tenantSlug: string, filters: AppointmentListFilters): PublicBooking[] {
+    const options = this.getBookingOptions(tenantSlug);
+
+    return Array.from(bookings.values())
+      .filter((booking) => booking.tenantId === options.tenant.id)
+      .filter((booking) => !filters.branchId || booking.branch.id === filters.branchId)
+      .filter((booking) => !filters.staffId || booking.staff.id === filters.staffId)
+      .filter((booking) => !filters.status || booking.appointment.status === filters.status)
+      .filter((booking) => !filters.date || booking.appointment.date === filters.date)
+      .sort((left, right) => {
+        const leftTime = `${left.appointment.date}T${left.appointment.time}`;
+        const rightTime = `${right.appointment.date}T${right.appointment.time}`;
+        return leftTime.localeCompare(rightTime);
+      });
+  }
+
+  updateBookingStatus(tenantSlug: string, bookingId: string, input: UpdateAppointmentStatusInput): PublicBooking {
+    const options = this.getBookingOptions(tenantSlug);
+    const booking = bookings.get(bookingId);
+
+    if (!booking || booking.tenantId !== options.tenant.id) {
+      throw new NotFoundException("Appointment was not found.");
+    }
+
+    const updated: PublicBooking = {
+      ...booking,
+      appointment: {
+        ...booking.appointment,
+        status: input.status,
+        ...(input.note ? { statusNote: input.note } : {}),
+        updatedAt: new Date().toISOString()
+      }
+    };
+
+    bookings.set(updated.id, updated);
+    return updated;
   }
 }

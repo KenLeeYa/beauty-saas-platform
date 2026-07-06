@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { industryTypes, tenantStatuses } from "@beauty-saas/shared";
+import { appointmentStatuses, industryTypes, tenantStatuses } from "@beauty-saas/shared";
 
 export const tenantSlugSchema = z.string().min(2).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 
@@ -12,6 +12,7 @@ export const createTenantSchema = z.object({
 });
 
 export const tenantStatusSchema = z.enum(tenantStatuses);
+export const appointmentStatusSchema = z.enum(appointmentStatuses);
 
 export const createBranchSchema = z.object({
   name: z.string().min(1).max(160),
@@ -43,6 +44,11 @@ export const createPublicBookingSchema = z.object({
   note: z.string().max(500).optional()
 });
 
+export const updateAppointmentStatusSchema = z.object({
+  status: appointmentStatusSchema,
+  note: z.string().max(500).optional()
+});
+
 export const createCustomerSchema = z.object({
   displayName: z.string().min(1).max(160),
   phone: z.string().max(40).optional(),
@@ -55,4 +61,5 @@ export type CreateTenantInput = z.infer<typeof createTenantSchema>;
 export type CreateBranchInput = z.infer<typeof createBranchSchema>;
 export type CreateAppointmentInput = z.infer<typeof createAppointmentSchema>;
 export type CreatePublicBookingInput = z.infer<typeof createPublicBookingSchema>;
+export type UpdateAppointmentStatusInput = z.infer<typeof updateAppointmentStatusSchema>;
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
