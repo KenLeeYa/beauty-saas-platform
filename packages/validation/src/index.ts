@@ -49,6 +49,14 @@ export const updateAppointmentStatusSchema = z.object({
   note: z.string().max(500).optional()
 });
 
+export const updateBookingSlotSchema = z.object({
+  branchId: z.string().min(1),
+  staffId: z.string().min(1),
+  date: z.string().date(),
+  time: z.string().regex(/^\d{2}:\d{2}$/),
+  isOpen: z.boolean()
+});
+
 export const createCustomerSchema = z.object({
   displayName: z.string().min(1).max(160),
   phone: z.string().max(40).optional(),
@@ -62,4 +70,5 @@ export type CreateBranchInput = z.infer<typeof createBranchSchema>;
 export type CreateAppointmentInput = z.infer<typeof createAppointmentSchema>;
 export type CreatePublicBookingInput = z.infer<typeof createPublicBookingSchema>;
 export type UpdateAppointmentStatusInput = z.infer<typeof updateAppointmentStatusSchema>;
+export type UpdateBookingSlotInput = z.infer<typeof updateBookingSlotSchema>;
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;

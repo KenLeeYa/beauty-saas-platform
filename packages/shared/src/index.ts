@@ -64,6 +64,9 @@ export type PermissionKey = (typeof permissionKeys)[number];
 export const appointmentStatuses = ["PENDING_CONFIRMATION", "CONFIRMED", "COMPLETED", "CANCELLED", "NO_SHOW"] as const;
 export type PublicBookingAppointmentStatus = (typeof appointmentStatuses)[number];
 
+export const bookingSlotStatuses = ["AVAILABLE", "BOOKED", "CLOSED"] as const;
+export type PublicBookingSlotStatus = (typeof bookingSlotStatuses)[number];
+
 export type TenantRole =
   | "TENANT_OWNER"
   | "TENANT_ADMIN"
@@ -132,6 +135,37 @@ export type PublicBookingDate = {
   date: string;
   label: string;
   slots: string[];
+  availability?: PublicBookingCalendarSlot[];
+};
+
+export type PublicBookingCalendarSlot = {
+  date: string;
+  time: string;
+  status: PublicBookingSlotStatus;
+  label: string;
+  branchId: string;
+  staffId: string;
+  appointmentId?: string;
+  customerName?: string;
+  serviceName?: string;
+  servicePrice?: number;
+  appointmentStatus?: PublicBookingAppointmentStatus;
+};
+
+export type PublicBookingCalendarDay = {
+  date: string;
+  label: string;
+  slots: PublicBookingCalendarSlot[];
+};
+
+export type PublicBookingNotification = {
+  id: string;
+  tenantId: string;
+  appointmentId: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  readAt?: string;
 };
 
 export type PublicBookingOptions = {
@@ -157,6 +191,9 @@ export type PublicBooking = {
   appointment: {
     date: string;
     time: string;
+    startAt: string;
+    endAt: string;
+    customerReminderAt: string;
     durationMinutes: number;
     status: PublicBookingAppointmentStatus;
     statusNote?: string;

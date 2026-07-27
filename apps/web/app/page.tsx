@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 const links = [
+  { href: "/booking-center", label: "商家 / 顧客模式", detail: "Calendar booking center with shop controls and customer booking." },
   { href: "/platform", label: "Platform", detail: "Tenants, templates, plans, audit." },
   { href: "/app", label: "Shop Admin", detail: "Branches, staff, services, customers." },
   { href: "/t/demo/booking", label: "Public Booking", detail: "Tenant-scoped booking entry." }
@@ -17,7 +18,7 @@ export default function HomePage() {
             A phase-one foundation for tenant isolation, branch scope, RBAC, appointments, customers, storage, and jobs.
           </p>
         </div>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           {links.map((link) => (
             <Link key={link.href} href={link.href} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal">
               <span className="text-lg font-semibold text-ink">{link.label}</span>

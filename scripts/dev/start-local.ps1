@@ -9,7 +9,11 @@ Assert-CommandExists "pnpm"
 Assert-CommandExists "docker"
 
 Ensure-LocalEnvFile
-$pnpm = (Get-Command "pnpm").Source
+$pnpmCommand = Get-Command "pnpm"
+$pnpm = $pnpmCommand.Source
+if ($pnpm -like "*.ps1") {
+  $pnpm = Join-Path (Split-Path -Parent $pnpm) "pnpm.cmd"
+}
 
 Write-Host "Starting local infrastructure..."
 docker compose up -d postgres mailpit minio
