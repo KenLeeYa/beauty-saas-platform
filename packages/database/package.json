@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@beauty-saas/shared": "workspace:*",
-    "drizzle-orm": "^0.44.2"
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "vitest": "^3.2.4"

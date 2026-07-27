@@ -13,7 +13,7 @@
   "dependencies": {
     "@beauty-saas/shared": "workspace:*",
     "date-fns": "^4.1.0",
-    "next": "^15.3.4",
+    "next": "^15.5.21",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zod": "^3.25.67"
@@ -22,7 +22,7 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "autoprefixer": "^10.4.21",
-    "postcss": "^8.5.6",
+    "postcss": "^8.5.18",
     "tailwindcss": "^3.4.17",
     "vitest": "^3.2.4"
   }
