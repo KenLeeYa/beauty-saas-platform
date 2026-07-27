@@ -29,7 +29,7 @@ const emptyForm: BookingForm = {
   note: ""
 };
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:4000/api/v1";
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 const bookingSteps: Array<{ key: BookingStep; label: string }> = [
   { key: "service", label: "服務" },
   { key: "time", label: "時間" },
@@ -150,7 +150,7 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-mist px-5 py-6">
+      <main className="min-h-screen bg-mist px-4 py-6 sm:px-5">
         <div className="mx-auto max-w-6xl">
           <div className="h-72 animate-pulse rounded-lg bg-white" />
         </div>
@@ -160,7 +160,7 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
 
   if (!options) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-mist px-5">
+      <main className="flex min-h-screen items-center justify-center bg-mist px-4 sm:px-5">
         <section className="w-full max-w-md rounded-lg border border-red-200 bg-white p-6">
           <p className="text-sm font-semibold text-red-600">訂位頁無法使用</p>
           <h1 className="mt-2 text-2xl font-semibold text-ink">{error ?? "找不到店家訂位資訊。"}</h1>
@@ -172,10 +172,10 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
   return (
     <main className="min-h-screen bg-mist">
       <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto grid max-w-7xl gap-6 px-5 py-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-5 lg:grid-cols-[1.2fr_0.8fr]">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-teal">{options.tenant.slug}</p>
-            <h1 className="mt-2 text-3xl font-semibold text-ink md:text-5xl">{options.tenant.name} 線上訂位</h1>
+            <h1 className="mt-2 text-3xl font-semibold text-ink sm:text-4xl md:text-5xl">{options.tenant.name} 線上訂位</h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
               選擇分店、服務與可約時段，留下聯絡資訊後即可建立預約。這是本機測試版，方便先確認流程與欄位。
             </p>
@@ -197,15 +197,15 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
         </div>
       </section>
 
-      <div className="mx-auto grid max-w-7xl gap-5 px-5 py-6 lg:grid-cols-[220px_1fr_340px]">
-        <nav className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-6 sm:px-5 xl:grid-cols-[220px_minmax(0,1fr)_340px]">
+        <nav className="grid grid-cols-4 gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:p-4 xl:block">
           {bookingSteps.map(({ key, label }) => {
             const state = stepState(key, step);
             return (
               <button
                 key={key}
                 type="button"
-                className={`mb-2 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium ${
+                className={`flex min-w-0 w-full flex-col items-center gap-1 rounded-md px-2 py-2 text-center text-sm font-medium sm:flex-row sm:gap-2 sm:text-left xl:mb-2 xl:gap-3 xl:px-3 ${
                   state === "active"
                     ? "bg-teal text-white"
                     : state === "done"
@@ -223,7 +223,7 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
           })}
         </nav>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-5">
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
           {error ? <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
           {step === "service" ? (
@@ -416,7 +416,7 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5">
                 <p className="text-sm font-semibold text-emerald-700">預約已建立</p>
                 <h2 className="mt-2 text-2xl font-semibold text-ink">等待店家確認</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-700">預約編號：{booking.id}</p>
+                <p className="mt-2 break-all text-sm leading-6 text-slate-700">預約編號：{booking.id}</p>
               </div>
               <button
                 className="rounded-md bg-ink px-5 py-3 text-sm font-semibold text-white"
@@ -433,7 +433,7 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
           ) : null}
         </section>
 
-        <aside className="rounded-lg border border-slate-200 bg-white p-5">
+        <aside className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
           <h2 className="text-lg font-semibold text-ink">預約摘要</h2>
           <dl className="mt-4 space-y-4 text-sm">
             <div>

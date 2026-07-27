@@ -45,6 +45,39 @@ function Get-DevLogDir {
   return $logDir
 }
 
+function Get-BeautyWebPort {
+  if (-not $env:BEAUTY_WEB_PORT) {
+    return 3100
+  }
+
+  try {
+    $port = [int]$env:BEAUTY_WEB_PORT
+  } catch {
+    throw "BEAUTY_WEB_PORT must be a valid port number."
+  }
+
+  if ($port -lt 1 -or $port -gt 65535) {
+    throw "BEAUTY_WEB_PORT must be between 1 and 65535."
+  }
+
+  return $port
+}
+
+function Get-LocalIPv4Address {
+  $configurations = Get-NetIPConfiguration -ErrorAction SilentlyContinue |
+    Where-Object { $_.NetAdapter.Status -eq "Up" -and $_.IPv4DefaultGateway -and $_.IPv4Address }
+
+  foreach ($configuration in $configurations) {
+    foreach ($address in @($configuration.IPv4Address.IPAddress)) {
+      if ($address -and $address -ne "127.0.0.1" -and $address -notlike "169.254.*") {
+        return $address
+      }
+    }
+  }
+
+  return $null
+}
+
 function Test-HttpEndpoint {
   param(
     [Parameter(Mandatory = $true)][string]$Url,

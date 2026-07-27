@@ -4,6 +4,7 @@ Add-CodexRuntimePath
 $root = Get-RepoRoot
 $logDir = Get-DevLogDir
 $pidFile = Join-Path $logDir "pids.json"
+$webPort = Get-BeautyWebPort
 Set-Location $root
 
 if (Test-Path -LiteralPath $pidFile) {
@@ -20,7 +21,7 @@ if (Test-Path -LiteralPath $pidFile) {
   Remove-Item -LiteralPath $pidFile -Force
 }
 
-Stop-LocalPortOwners -Ports @(3000, 4000)
+Stop-LocalPortOwners -Ports @($webPort, 4000)
 
 Write-Host "Stopping local infrastructure..."
 docker compose stop postgres mailpit minio

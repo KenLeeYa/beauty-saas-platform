@@ -26,7 +26,7 @@ type CustomerForm = {
   note: string;
 };
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:4000/api/v1";
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 const emptyCustomerForm: CustomerForm = {
   branchId: "",
@@ -269,15 +269,15 @@ export function BookingCenter({ tenantSlug }: { tenantSlug: string }) {
   return (
     <main className="min-h-screen bg-mist">
       <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-6 sm:px-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <Link className="text-sm font-semibold text-teal" href="/">
               Beauty SaaS Platform
             </Link>
-            <h1 className="mt-2 text-3xl font-semibold text-ink md:text-5xl">線上預約中心</h1>
+            <h1 className="mt-2 text-3xl font-semibold text-ink sm:text-4xl md:text-5xl">線上預約中心</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">以日曆為主體，商家管理時段與預約，顧客只看到公開可預約狀態。</p>
           </div>
-          <div className="grid w-full grid-cols-2 rounded-lg border border-slate-200 bg-slate-50 p-1 lg:w-80">
+          <div className="grid w-full grid-cols-2 rounded-lg border border-slate-200 bg-slate-50 p-1 sm:w-80">
             <button
               className={`rounded-md px-4 py-3 text-sm font-semibold ${mode === "merchant" ? "bg-ink text-white" : "text-slate-600"}`}
               type="button"
@@ -296,10 +296,10 @@ export function BookingCenter({ tenantSlug }: { tenantSlug: string }) {
         </div>
       </section>
 
-      <div className="mx-auto max-w-7xl px-5 py-6">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-5">
         {error ? <p className="mb-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
-        <section className="mb-5 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-3">
+        <section className="mb-5 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
           <label className="block">
             <span className="text-xs font-semibold text-slate-500">分店</span>
             <select className="mt-2 w-full rounded-md border border-slate-300 px-3 py-3 text-sm" value={form.branchId} onChange={(event) => void changeForm({ branchId: event.target.value })}>
@@ -333,24 +333,24 @@ export function BookingCenter({ tenantSlug }: { tenantSlug: string }) {
         </section>
 
         {mode === "merchant" ? (
-          <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-            <section className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-2xl font-semibold text-ink">預約行事曆</h2>
                   <p className="mt-1 text-sm text-slate-600">可直接關閉休假或不營業時段；已預約時段不可關閉。</p>
                 </div>
-                <div className="flex gap-2 text-sm">
+                <div className="grid w-full grid-cols-2 gap-2 text-sm sm:flex sm:w-auto">
                   <span className="rounded-md bg-emerald-50 px-3 py-2 text-emerald-700">可約 {availableCount}</span>
                   <span className="rounded-md bg-amber-50 px-3 py-2 text-amber-700">預約 {bookedCount}</span>
-                  <span className="rounded-md bg-slate-100 px-3 py-2 text-slate-700">金額 {currency(totalRevenue)}</span>
+                  <span className="col-span-2 rounded-md bg-slate-100 px-3 py-2 text-slate-700 sm:col-span-1">金額 {currency(totalRevenue)}</span>
                 </div>
               </div>
 
               {isLoading ? <div className="h-80 animate-pulse rounded-md bg-slate-100" /> : null}
 
               {!isLoading ? (
-                <div className="grid gap-3 lg:grid-cols-4">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   {merchantCalendar.map((day) => (
                     <section key={day.date} className="rounded-lg border border-slate-200 p-3">
                       <h3 className="font-semibold text-ink">{day.label}</h3>
@@ -381,19 +381,19 @@ export function BookingCenter({ tenantSlug }: { tenantSlug: string }) {
             </section>
 
             <aside className="space-y-5">
-              <section className="rounded-lg border border-slate-200 bg-white p-5">
+              <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
                 <h2 className="text-lg font-semibold text-ink">預約完成通知</h2>
                 <div className="mt-4 space-y-3">
                   {notifications.length === 0 ? <p className="text-sm text-slate-600">目前沒有新通知。</p> : null}
                   {notifications.slice(0, 6).map((notification) => (
-                    <article key={notification.id} className="rounded-md border border-slate-200 p-3">
+                    <article key={notification.id} className="min-w-0 break-words rounded-md border border-slate-200 p-3">
                       <p className="text-sm font-semibold text-ink">{notification.title}</p>
                       <p className="mt-1 text-sm leading-6 text-slate-600">{notification.message}</p>
                     </article>
                   ))}
                 </div>
               </section>
-              <section className="rounded-lg border border-slate-200 bg-white p-5">
+              <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
                 <h2 className="text-lg font-semibold text-ink">發佈預約表</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">目前畫面可作為店家次月預約表草稿。後續若要發 IG/LINE 圖文，可再加一鍵匯出圖片。</p>
               </section>
@@ -402,11 +402,11 @@ export function BookingCenter({ tenantSlug }: { tenantSlug: string }) {
         ) : null}
 
         {mode === "customer" ? (
-          <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
-            <section className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
               <h2 className="text-2xl font-semibold text-ink">選擇預約時段</h2>
               <p className="mt-1 text-sm text-slate-600">顧客只會看到時段狀態，不會看到前一位顧客姓名或電話。</p>
-              <div className="mt-5 grid gap-3 lg:grid-cols-4">
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {customerCalendar.map((day, dayIndex) => (
                   <section key={day.date} className="rounded-lg border border-slate-200 p-3">
                     <div className="flex items-center justify-between">
@@ -434,7 +434,7 @@ export function BookingCenter({ tenantSlug }: { tenantSlug: string }) {
               </div>
             </section>
 
-            <aside className="rounded-lg border border-slate-200 bg-white p-5">
+            <aside className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
               <h2 className="text-lg font-semibold text-ink">預約資料</h2>
               <dl className="mt-4 space-y-3 text-sm">
                 <div>
