@@ -8,14 +8,28 @@ import { getServerEnv } from "@/server/env";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+function safeNext(value: string | undefined): string | undefined {
+  return value && value.startsWith("/") && !value.startsWith("//")
+    ? value.slice(0, 500)
+    : undefined;
+}
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    next?: string;
+  }>;
+}) {
   const session = await getCurrentSession();
+  const requestedNext = safeNext((await searchParams).next);
   if (session) {
     redirect(
-      await resolveSessionDestination({
-        profileId: session.profileId,
-        platformRole: session.platformRole,
-      }),
+      requestedNext ??
+        (await resolveSessionDestination({
+          profileId: session.profileId,
+          platformRole: session.platformRole,
+        })),
     );
   }
 
@@ -50,6 +64,7 @@ export default async function HomePage() {
           localAuthEnabled={
             env.ENABLE_LOCAL_AUTH_STUB && env.APP_ENV !== "production"
           }
+          nextPath={requestedNext}
         />
       </section>
     </main>

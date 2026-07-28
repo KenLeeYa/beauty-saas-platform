@@ -18,6 +18,12 @@ import {
   hashAbuseIdentifier,
 } from "@/server/security/request";
 
+function safeNext(value: string | null): string | null {
+  return value && value.startsWith("/") && !value.startsWith("//")
+    ? value.slice(0, 500)
+    : null;
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const requestId = getRequestId(request);
   const clientIdentifier = getTrustedClientIdentifier(request);
@@ -59,10 +65,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       userAgent: request.headers.get("user-agent"),
       ipIdentifier: clientIdentifier,
     });
-    const destination = await resolveSessionDestination({
-      profileId: profile.profileId,
-      platformRole: profile.platformRole,
-    });
+    const requestedNext = safeNext(request.nextUrl.searchParams.get("next"));
+    const destination =
+      requestedNext ??
+      (await resolveSessionDestination({
+        profileId: profile.profileId,
+        platformRole: profile.platformRole,
+      }));
 
     const response = NextResponse.json(
       {

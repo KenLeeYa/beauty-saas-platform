@@ -90,7 +90,12 @@ select
       'BASIC_CALENDAR',
       'STAFF_SCHEDULING',
       'CUSTOMER_CRM',
-      'BUSINESS_HOURS'
+      'BUSINESS_HOURS',
+      'RESOURCE_MANAGEMENT',
+      'LINE_NOTIFICATIONS',
+      'EMAIL_NOTIFICATIONS',
+      'DEPOSITS',
+      'CANCELLATION_RULES'
     )
     when plans.code = 'LITE' then feature_key in (
       'ONLINE_BOOKING',

@@ -24,7 +24,7 @@ export const idempotencyKeySchema = z
 export const publicLocationSchema = z.object({
   organizationSlug: slugSchema,
   locationSlug: slugSchema,
-});
+}).strict();
 
 export const createPublicSessionSchema = publicLocationSchema.extend({
   turnstileToken: z.string().min(1).max(4_096),
@@ -35,13 +35,13 @@ export const publicAvailabilitySchema = z.object({
   serviceVariantId: uuidSchema,
   date: localDateSchema,
   staffProfileId: uuidSchema.optional(),
-});
+}).strict();
 
 export const createBookingHoldSchema = z.object({
   serviceVariantId: uuidSchema,
   staffProfileId: uuidSchema,
   startsAt: isoDateTimeSchema,
-});
+}).strict();
 
 export const confirmPublicBookingSchema = z.object({
   holdToken: tokenSchema,
@@ -50,16 +50,16 @@ export const confirmPublicBookingSchema = z.object({
     phone: z.string().trim().min(8).max(32),
     email: z.union([z.email(), z.literal("")]).optional(),
     note: z.string().trim().max(1_000).optional(),
-  }),
+  }).strict(),
   consents: z.object({
     service: z.literal(true),
     marketing: z.boolean().default(false),
-  }),
-});
+  }).strict(),
+}).strict();
 
 export const trackingTokenSchema = z.object({
   trackingToken: tokenSchema,
-});
+}).strict();
 
 export const cancelPublicBookingSchema = trackingTokenSchema.extend({
   reason: z.string().trim().min(1).max(500),
@@ -68,7 +68,7 @@ export const cancelPublicBookingSchema = trackingTokenSchema.extend({
 export const reschedulePublicBookingSchema = z.object({
   trackingToken: tokenSchema,
   holdToken: tokenSchema,
-});
+}).strict();
 
 export type PublicLocationInput = z.infer<typeof publicLocationSchema>;
 export type PublicAvailabilityInput = z.infer<

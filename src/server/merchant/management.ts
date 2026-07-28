@@ -180,6 +180,16 @@ export async function createMerchantService(input: {
           priceMinor: input.priceMinor,
         },
       });
+      await transaction.merchant_setup_progress.updateMany({
+        where: {
+          organization_id: input.context.organization.id,
+          service_completed_at: null,
+        },
+        data: {
+          service_completed_at: new Date(),
+          last_step: "STAFF",
+        },
+      });
       return {
         serviceId: service.id,
         locationServiceId: locationService.id,
@@ -350,6 +360,16 @@ export async function createMerchantStaff(input: {
           skills: input.skills,
         },
       });
+      await transaction.merchant_setup_progress.updateMany({
+        where: {
+          organization_id: input.context.organization.id,
+          staff_completed_at: null,
+        },
+        data: {
+          staff_completed_at: new Date(),
+          last_step: "RESOURCE",
+        },
+      });
       return staff;
     },
     {
@@ -447,6 +467,16 @@ export async function createMerchantResource(input: {
           name: input.name,
           typeName: input.typeName,
           kind: input.kind,
+        },
+      });
+      await transaction.merchant_setup_progress.updateMany({
+        where: {
+          organization_id: input.context.organization.id,
+          resource_completed_at: null,
+        },
+        data: {
+          resource_completed_at: new Date(),
+          last_step: "POLICIES",
         },
       });
       return resource;

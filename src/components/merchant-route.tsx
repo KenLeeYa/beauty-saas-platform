@@ -42,6 +42,28 @@ export async function MerchantRoute({
     locationSlug: query.location,
   });
   const data = await getMerchantWorkspaceData(context);
+  const entityRevision =
+    activeView === "services"
+      ? data.services.map((service) => service.locationServiceId)
+      : activeView === "staff"
+        ? data.staff.map((staff) => staff.id)
+        : activeView === "resources"
+          ? data.resources.map((resource) => resource.id)
+          : activeView === "customers"
+            ? data.customers.map((customer) => customer.id)
+            : [];
+  const workspaceRevision = [
+    context.organization.id,
+    context.location?.id ?? "organization",
+    activeView,
+    ...entityRevision,
+  ].join(":");
 
-  return <MerchantWorkspace activeView={activeView} initialData={data} />;
+  return (
+    <MerchantWorkspace
+      activeView={activeView}
+      initialData={data}
+      key={workspaceRevision}
+    />
+  );
 }

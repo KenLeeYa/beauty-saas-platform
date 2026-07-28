@@ -18,8 +18,10 @@ import {
   PauseCircle,
   Plus,
   ReceiptText,
+  Rocket,
   Settings,
   Store,
+  TestTube2,
   UserRound,
   Users,
   Wrench,
@@ -38,6 +40,7 @@ import {
   MonthCalendar,
 } from "@/components/month-calendar";
 import type { MerchantView } from "@/components/merchant-route";
+import { formatLocalDate } from "@/lib/presentation/date-time";
 import type { MerchantWorkspaceData } from "@/server/merchant/data";
 
 type ApiEnvelope<T> = {
@@ -414,6 +417,75 @@ export function MerchantWorkspace({
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "建立資料失敗。",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function runSetupAction(
+    body: Readonly<Record<string, unknown>>,
+  ): Promise<void> {
+    setIsSubmitting(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      const result = await mutate<{
+        completedSteps: number;
+        totalSteps: number;
+        testBookingCompleted: boolean;
+        goLiveAt: string | null;
+        publicBookingPath?: string;
+      }>("/api/merchant/setup", "POST", body);
+      setData((current) => {
+        if (!current.setup) {
+          return current;
+        }
+        const action = String(body.action);
+        return {
+          ...current,
+          location:
+            action === "GO_LIVE"
+              ? {
+                  ...current.location,
+                  bookingState: "OPEN",
+                  onlineBookingEnabled: true,
+                }
+              : current.location,
+          setup: {
+            ...current.setup,
+            completedSteps: result.completedSteps,
+            totalSteps: result.totalSteps,
+            goLiveAt: result.goLiveAt,
+            steps: {
+              ...current.setup.steps,
+              ...(action === "BUSINESS_HOURS"
+                ? { businessHours: true }
+                : {}),
+              ...(action === "POLICIES" ? { policies: true } : {}),
+              ...(action === "NOTIFICATIONS"
+                ? { notifications: true }
+                : {}),
+              ...(action === "CREATE_TEST_BOOKING"
+                ? { testBooking: result.testBookingCompleted }
+                : {}),
+            },
+          },
+        };
+      });
+      setFeedback(
+        body.action === "GO_LIVE"
+          ? "公開預約已正式開放。"
+          : body.action === "CREATE_TEST_BOOKING"
+            ? "測試預約已完成。"
+            : "開店設定已儲存。",
+      );
+      router.refresh();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "開店設定更新失敗。",
       );
     } finally {
       setIsSubmitting(false);
@@ -1356,83 +1428,481 @@ export function MerchantWorkspace({
   function renderPlan(): ReactNode {
     const subscription = data.subscription;
     return (
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="border-y border-slate-200 bg-white px-5 py-6">
-          <p className="text-sm text-slate-500">目前方案</p>
-          <p className="mt-2 text-2xl font-semibold text-ink">
-            {subscription?.planName ?? "尚未啟用"}
-          </p>
-          <p className="mt-2 text-sm text-slate-600">
-            狀態：{subscription?.status ?? "無訂閱"}
-          </p>
-          {subscription?.periodEnd ? (
-            <p className="mt-1 text-sm text-slate-500">
-              本期至{" "}
-              {new Date(subscription.periodEnd).toLocaleDateString(
-                "zh-TW",
-              )}
+      <div className="space-y-8">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <section className="border-y border-slate-200 bg-white px-5 py-6">
+            <p className="text-sm text-slate-500">目前方案</p>
+            <p className="mt-2 text-2xl font-semibold text-ink">
+              {subscription?.planName ?? "尚未啟用"}
             </p>
-          ) : null}
-        </section>
-        <aside className="border-t-4 border-gold bg-white p-5 shadow-sm">
-          <p className="font-semibold text-ink">方案權益</p>
-          <p className="mt-2 text-sm leading-6 text-slate-500">
-            功能權限由方案、訂閱狀態與平台調整共同決定，後台顯示不取代 API 授權檢查。
-          </p>
-        </aside>
+            <p className="mt-2 text-sm text-slate-600">
+              狀態：{subscription?.status ?? "無訂閱"}
+            </p>
+            {subscription?.periodEnd ? (
+              <p className="mt-1 text-sm text-slate-500">
+                本期至{" "}
+                {formatLocalDate(
+                  subscription.periodEnd,
+                  data.location.timezone,
+                )}
+              </p>
+            ) : null}
+          </section>
+          <aside className="border-t-4 border-gold bg-white p-5 shadow-sm">
+            <p className="font-semibold text-ink">方案權益</p>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              功能權限由方案、訂閱狀態與平台調整共同決定，後台顯示不取代 API 授權檢查。
+            </p>
+          </aside>
+        </div>
+
+        {activeView === "billing" ? (
+          <section>
+            <h2 className="text-lg font-semibold text-ink">帳單紀錄</h2>
+            <div className="mt-3 overflow-x-auto border-y border-slate-200 bg-white">
+              <table className="w-full min-w-[680px] text-left text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">帳單</th>
+                    <th className="px-4 py-3 font-semibold">狀態</th>
+                    <th className="px-4 py-3 font-semibold">總額</th>
+                    <th className="px-4 py-3 font-semibold">已付</th>
+                    <th className="px-4 py-3 font-semibold">繳款期限</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.invoices.map((invoice) => (
+                    <tr key={invoice.id}>
+                      <td className="px-4 py-3 font-medium text-ink">
+                        {invoice.number}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {invoice.status}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {formatMoney(
+                          invoice.totalMinor,
+                          invoice.currency,
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {formatMoney(
+                          invoice.amountPaidMinor,
+                          invoice.currency,
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {invoice.dueAt
+                          ? formatLocalDate(
+                              invoice.dueAt,
+                              data.location.timezone,
+                            )
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {data.invoices.length === 0 ? (
+                <p className="px-4 py-10 text-center text-sm text-slate-500">
+                  目前沒有帳單。
+                </p>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
       </div>
     );
   }
 
   function renderSetup(): ReactNode {
     const setup = data.setup;
+    if (!setup) {
+      return (
+        <EmptyState
+          title="尚未建立開店流程"
+          body="請聯絡平台管理員確認商家核准與試用方案狀態。"
+        />
+      );
+    }
     const steps = [
-      "品牌資料",
-      "分店",
-      "營業時間",
-      "服務",
-      "人員",
-      "資源",
-      "預約政策",
-      "通知",
-    ];
-    const completed = setup?.completedSteps ?? 0;
+      { key: "brand", label: "品牌資料", done: setup.steps.brand },
+      {
+        key: "location",
+        label: "分店資料",
+        done: setup.steps.location,
+      },
+      {
+        key: "businessHours",
+        label: "營業時間",
+        done: setup.steps.businessHours,
+      },
+      {
+        key: "service",
+        label: "服務項目",
+        done: setup.steps.service,
+        href: `/merchant/services?${scope}`,
+      },
+      {
+        key: "staff",
+        label: "服務人員與技能",
+        done: setup.steps.staff,
+        href: `/merchant/staff?${scope}`,
+      },
+      {
+        key: "resource",
+        label: "空間與設備",
+        done: setup.steps.resource,
+        href: `/merchant/resources?${scope}`,
+      },
+      {
+        key: "policies",
+        label: "預約、取消與訂金規則",
+        done: setup.steps.policies,
+      },
+      {
+        key: "notifications",
+        label: "通知通道",
+        done: setup.steps.notifications,
+      },
+      {
+        key: "testBooking",
+        label: "測試預約",
+        done: setup.steps.testBooking,
+      },
+    ] as const;
+    const baseSetupComplete = steps
+      .slice(0, 8)
+      .every((step) => step.done);
     return (
-      <div className="max-w-2xl">
+      <div className="max-w-3xl space-y-8">
         <div className="mb-6 flex items-end justify-between gap-4">
           <div>
             <p className="text-sm text-slate-500">完成進度</p>
             <p className="mt-1 text-2xl font-semibold text-ink">
-              {completed} / {steps.length}
+              {setup.completedSteps} / {setup.totalSteps}
             </p>
           </div>
           <span className="text-sm font-medium text-teal">
-            {setup?.goLiveAt ? "已上線" : "尚未上線"}
+            {setup.goLiveAt ? "已上線" : "尚未上線"}
           </span>
         </div>
         <ol className="divide-y divide-slate-200 border-y border-slate-200 bg-white">
           {steps.map((step, index) => (
             <li
-              key={step}
+              key={step.key}
               className="flex items-center gap-3 px-4 py-4"
             >
               <span
                 className={`flex h-7 w-7 items-center justify-center rounded-md text-xs font-semibold ${
-                  index < completed
+                  step.done
                     ? "bg-teal text-white"
                     : "bg-slate-100 text-slate-500"
                 }`}
               >
-                {index < completed ? (
+                {step.done ? (
                   <Check aria-hidden="true" className="h-4 w-4" />
                 ) : (
                   index + 1
                 )}
               </span>
-              <span className="font-medium text-ink">{step}</span>
+              <span className="min-w-0 flex-1 font-medium text-ink">
+                {step.label}
+              </span>
+              {"href" in step && step.href ? (
+                <Link
+                  className="text-sm font-semibold text-teal hover:underline"
+                  href={step.href}
+                >
+                  {step.done ? "查看" : "設定"}
+                </Link>
+              ) : null}
             </li>
           ))}
         </ol>
+
+        {!setup.steps.businessHours ? (
+          <form
+            className="border-y border-slate-200 bg-white px-5 py-6"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              void runSetupAction({
+                action: "BUSINESS_HOURS",
+                days: [1, 2, 3, 4, 5, 6],
+                opensAt: String(form.get("opensAt")),
+                closesAt: String(form.get("closesAt")),
+              });
+            }}
+          >
+            <h2 className="font-semibold text-ink">設定營業時間</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              週一至週六
+            </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label>
+                <span className="text-sm font-medium text-slate-700">
+                  開始
+                </span>
+                <input
+                  className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
+                  defaultValue="10:00"
+                  name="opensAt"
+                  required
+                  type="time"
+                />
+              </label>
+              <label>
+                <span className="text-sm font-medium text-slate-700">
+                  結束
+                </span>
+                <input
+                  className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
+                  defaultValue="20:00"
+                  name="closesAt"
+                  required
+                  type="time"
+                />
+              </label>
+            </div>
+            <button
+              className="mt-5 h-10 rounded-md bg-ink px-4 text-sm font-semibold text-white disabled:opacity-50"
+              disabled={isSubmitting}
+              type="submit"
+            >
+              儲存營業時間
+            </button>
+          </form>
+        ) : null}
+
+        {!setup.steps.policies ? (
+          <form
+            className="border-y border-slate-200 bg-white px-5 py-6"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              void runSetupAction({
+                action: "POLICIES",
+                slotIntervalMinutes: String(
+                  form.get("slotIntervalMinutes"),
+                ),
+                minimumLeadMinutes: Number(
+                  form.get("minimumLeadMinutes"),
+                ),
+                maximumAdvanceDays: Number(
+                  form.get("maximumAdvanceDays"),
+                ),
+                holdMinutes: Number(form.get("holdMinutes")),
+                cancellationCutoffHours: Number(
+                  form.get("cancellationCutoffHours"),
+                ),
+                depositMode: String(form.get("depositMode")),
+                depositAmountMinor:
+                  Number(form.get("depositAmount")) * 100,
+                depositPercentage: Number(
+                  form.get("depositPercentage"),
+                ),
+              });
+            }}
+          >
+            <h2 className="font-semibold text-ink">設定預約政策</h2>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <label>
+                <span className="text-sm font-medium text-slate-700">
+                  時段間隔
+                </span>
+                <select
+                  className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3"
+                  defaultValue="30"
+                  name="slotIntervalMinutes"
+                >
+                  <option value="15">15 分鐘</option>
+                  <option value="30">30 分鐘</option>
+                  <option value="60">60 分鐘</option>
+                </select>
+              </label>
+              <label>
+                <span className="text-sm font-medium text-slate-700">
+                  最少提前分鐘
+                </span>
+                <input
+                  className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
+                  defaultValue="60"
+                  min="0"
+                  name="minimumLeadMinutes"
+                  required
+                  type="number"
+                />
+              </label>
+              <label>
+                <span className="text-sm font-medium text-slate-700">
+                  最遠可約天數
+                </span>
+                <input
+                  className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
+                  defaultValue="60"
+                  min="1"
+                  name="maximumAdvanceDays"
+                  required
+                  type="number"
+                />
+              </label>
+              <label>
+                <span className="text-sm font-medium text-slate-700">
+                  保留分鐘
+                </span>
+                <input
+                  className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
+                  defaultValue="10"
+                  min="5"
+                  name="holdMinutes"
+                  required
+                  type="number"
+                />
+              </label>
+              <label>
+                <span className="text-sm font-medium text-slate-700">
+                  免費取消小時
+                </span>
+                <input
+                  className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
+                  defaultValue="24"
+                  min="0"
+                  name="cancellationCutoffHours"
+                  required
+                  type="number"
+                />
+              </label>
+              <label>
+                <span className="text-sm font-medium text-slate-700">
+                  訂金方式
+                </span>
+                <select
+                  className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3"
+                  defaultValue="FIXED"
+                  name="depositMode"
+                >
+                  <option value="NONE">不收訂金</option>
+                  <option value="FIXED">固定金額</option>
+                  <option value="PERCENTAGE">比例</option>
+                </select>
+              </label>
+              <label>
+                <span className="text-sm font-medium text-slate-700">
+                  固定訂金（元）
+                </span>
+                <input
+                  className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
+                  defaultValue="500"
+                  min="0"
+                  name="depositAmount"
+                  type="number"
+                />
+              </label>
+              <label>
+                <span className="text-sm font-medium text-slate-700">
+                  訂金比例（%）
+                </span>
+                <input
+                  className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
+                  defaultValue="20"
+                  max="100"
+                  min="0"
+                  name="depositPercentage"
+                  type="number"
+                />
+              </label>
+            </div>
+            <button
+              className="mt-5 h-10 rounded-md bg-ink px-4 text-sm font-semibold text-white disabled:opacity-50"
+              disabled={isSubmitting}
+              type="submit"
+            >
+              儲存預約政策
+            </button>
+          </form>
+        ) : null}
+
+        {!setup.steps.notifications ? (
+          <section className="border-y border-slate-200 bg-white px-5 py-6">
+            <h2 className="font-semibold text-ink">確認通知通道</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              LINE 與 Email 先建立為停用狀態，之後加入正式憑證才會發送。
+            </p>
+            <button
+              className="mt-4 h-10 rounded-md bg-ink px-4 text-sm font-semibold text-white disabled:opacity-50"
+              disabled={isSubmitting}
+              type="button"
+              onClick={() =>
+                void runSetupAction({
+                  action: "NOTIFICATIONS",
+                  channels: ["LINE", "EMAIL"],
+                })
+              }
+            >
+              確認通知設定
+            </button>
+          </section>
+        ) : null}
+
+        {!setup.steps.testBooking ? (
+          <section className="border-y border-slate-200 bg-white px-5 py-6">
+            <h2 className="font-semibold text-ink">執行測試預約</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              系統會使用第一個可用服務、服務人員與時段完成一筆測試預約，不列入正式用量。
+            </p>
+            <button
+              className="mt-4 inline-flex h-10 items-center gap-2 rounded-md bg-coral px-4 text-sm font-semibold text-white disabled:opacity-50"
+              disabled={isSubmitting || !baseSetupComplete}
+              type="button"
+              onClick={() =>
+                void runSetupAction({
+                  action: "CREATE_TEST_BOOKING",
+                })
+              }
+            >
+              <TestTube2 aria-hidden="true" className="h-4 w-4" />
+              建立並完成測試預約
+            </button>
+          </section>
+        ) : null}
+
+        {setup.steps.testBooking && !setup.goLiveAt ? (
+          <section className="border-l-4 border-teal bg-white px-5 py-6">
+            <h2 className="font-semibold text-ink">準備正式上線</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              上線後會公開商家頁並開放此分店接受顧客預約。
+            </p>
+            <button
+              className="mt-4 inline-flex h-11 items-center gap-2 rounded-md bg-teal px-5 text-sm font-semibold text-white disabled:opacity-50"
+              disabled={isSubmitting}
+              type="button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "確定要開放公開預約並正式上線嗎？",
+                  )
+                ) {
+                  void runSetupAction({ action: "GO_LIVE" });
+                }
+              }}
+            >
+              <Rocket aria-hidden="true" className="h-4 w-4" />
+              正式上線
+            </button>
+          </section>
+        ) : null}
+
+        {setup.goLiveAt ? (
+          <Link
+            className="inline-flex h-11 items-center gap-2 rounded-md bg-teal px-5 text-sm font-semibold text-white"
+            href={publicBookingPath}
+            target="_blank"
+          >
+            開啟公開預約
+            <ExternalLink aria-hidden="true" className="h-4 w-4" />
+          </Link>
+        ) : null}
       </div>
     );
   }

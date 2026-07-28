@@ -18,6 +18,7 @@ const ids = {
     finance: "33333333-3333-4333-8333-333333333306",
     platformAdmin: "33333333-3333-4333-8333-333333333307",
     customer: "33333333-3333-4333-8333-333333333308",
+    applicant: "33333333-3333-4333-8333-333333333309",
   },
   staff: {
     primary: "44444444-4444-4444-8444-444444444401",
@@ -95,6 +96,11 @@ const profiles: SeedProfile[] = [
     id: ids.profiles.customer,
     email: "customer@lumi.test",
     displayName: "林小姐",
+  },
+  {
+    id: ids.profiles.applicant,
+    email: "applicant@beauty.test",
+    displayName: "新商家申請人",
   },
 ];
 

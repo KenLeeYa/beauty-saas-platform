@@ -1,6 +1,15 @@
 "use client";
 
-import { Eye, EyeOff, LogIn, ShieldCheck, Store, UserRound } from "lucide-react";
+import {
+  ClipboardList,
+  Eye,
+  EyeOff,
+  LogIn,
+  ShieldCheck,
+  Store,
+  UserRound,
+} from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 
@@ -22,6 +31,10 @@ const testAccounts = {
     email: "customer@lumi.test",
     password: "Beauty123!",
   },
+  applicant: {
+    email: "applicant@beauty.test",
+    password: "Beauty123!",
+  },
 } as const;
 
 const subscribeToHydration = () => () => {};
@@ -31,9 +44,11 @@ const getServerHydrationSnapshot = () => false;
 export function LoginForm({
   googleEnabled,
   localAuthEnabled,
+  nextPath,
 }: {
   googleEnabled: boolean;
   localAuthEnabled: boolean;
+  nextPath?: string;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState<string>(
@@ -56,7 +71,10 @@ export function LoginForm({
     setError(null);
 
     try {
-      const response = await fetch("/api/auth/login", {
+      const loginPath = nextPath
+        ? `/api/auth/login?next=${encodeURIComponent(nextPath)}`
+        : "/api/auth/login";
+      const response = await fetch(loginPath, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -101,7 +119,7 @@ export function LoginForm({
       </p>
 
       {localAuthEnabled ? (
-        <div className="mt-7 grid grid-cols-2 gap-3">
+        <div className="mt-7 grid gap-3 sm:grid-cols-3">
           <button
             className="flex min-h-20 items-center gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:cursor-wait disabled:opacity-60"
             disabled={!isHydrated}
@@ -140,6 +158,28 @@ export function LoginForm({
               </span>
               <span className="mt-1 block text-xs text-slate-500">
                 線上預約
+              </span>
+            </span>
+          </button>
+          <button
+            className="flex min-h-20 items-center gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30 disabled:cursor-wait disabled:opacity-60"
+            disabled={!isHydrated}
+            type="button"
+            onClick={() => {
+              setEmail(testAccounts.applicant.email);
+              setPassword(testAccounts.applicant.password);
+            }}
+          >
+            <ClipboardList
+              aria-hidden="true"
+              className="h-5 w-5 shrink-0 text-gold"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-ink">
+                申請測試
+              </span>
+              <span className="mt-1 block text-xs text-slate-500">
+                商家導入
               </span>
             </span>
           </button>
@@ -224,7 +264,13 @@ export function LoginForm({
             ? "border-slate-300 bg-white text-ink hover:border-teal"
             : "pointer-events-none border-slate-200 bg-slate-50 text-slate-400"
         }`}
-        href={googleEnabled ? "/auth/google" : "#"}
+        href={
+          googleEnabled
+            ? nextPath
+              ? `/auth/google?next=${encodeURIComponent(nextPath)}`
+              : "/auth/google"
+            : "#"
+        }
       >
         <span
           aria-hidden="true"
@@ -238,6 +284,15 @@ export function LoginForm({
       <p className="mt-4 flex items-center justify-center gap-2 text-center text-xs text-slate-500">
         <ShieldCheck aria-hidden="true" className="h-4 w-4 text-teal" />
         角色與分店權限由伺服器重新驗證
+      </p>
+      <p className="mt-5 text-center text-sm text-slate-600">
+        想使用店家後台？{" "}
+        <Link
+          className="font-semibold text-teal hover:underline"
+          href="/onboarding"
+        >
+          申請商家空間
+        </Link>
       </p>
     </div>
   );

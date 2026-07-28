@@ -2,41 +2,39 @@
 
 ## Scope
 
-Beauty and StallOrder share architecture and security invariants, not production
-runtime data. Each product has an independent repository, Supabase project,
-database, Auth tenant, Storage buckets, secrets, migrations, backups, staging,
-and production environment.
+Beauty 與 StallOrder 共用架構和安全不變量，不共用正式 runtime data。兩個產品各自擁有 repository、Supabase project、database、Auth、Storage、secrets、migrations、backups 與 deployment。
 
 | StallOrder component | Beauty component | Shared invariant | Beauty-specific difference | Status | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| Organization | Organization | Tenant, billing, entitlement, and isolation boundary | Beauty organization owns locations and customer CRM | In progress | `supabase/migrations` |
-| Stall | Location | Child operational scope with parent consistency checks | Salon, studio, branch, or service location | In progress | `prisma/schema.prisma` |
-| Product / StallProduct | Service / ServiceVariant / LocationService | Server-owned catalog, snapshot on transaction | Duration, buffers, staff skills, resources, deposits | In progress | `src/server/catalog` |
-| Order / OrderItem | Booking / BookingSegment | State machine, immutable snapshots, atomic transitions | Time ranges, allocations, cancellation and reschedule | In progress | `src/server/bookings` |
-| OrderSession | PublicBookingSession | Short-lived high-entropy token stored as a hash | Organization, location, device, and booking-policy scope | In progress | `src/server/public-booking` |
-| QR public ordering | Public booking flow | Turnstile, strict CORS, request ID, rate limits, idempotency | Catalog, availability, hold, confirm, manage | In progress | `src/app/api/public` |
-| StallMembership | LocationMembership | Membership is authorization evidence; client scope is untrusted | Front desk and service-provider roles | In progress | `src/server/authorization` |
-| AuthSession | AuthSession | 256-bit token, SHA-256 at rest, eight-hour expiry, server revoke | `beauty_session` and session-bound CSRF | In progress | `src/server/auth` |
-| Plan / Subscription | PlanVersion / Subscription | Versioned contracts and server-side entitlement resolution | Staff, service, resource, CRM, storage, booking limits | In progress | `src/server/entitlements` |
-| AdditionalStallApproval | OrganizationFeatureOverride | Platform-admin-only override with audit and expiry | ALLOW, DENY, or LIMIT by Beauty feature key | In progress | `src/server/entitlements` |
-| Payment | BookingPayment | Integer minor units, server calculation, audit | Deposit, cancellation fee, manual proof, refund | In progress | `src/server/payments` |
-| Invoice | SaaS Invoice | Separate from customer transactions | Manual phase-one Beauty subscription billing | In progress | `src/server/billing` |
-| OperationalEvent | OperationalEvent | Authorized Realtime signal followed by authoritative refetch | Booking, staff, resource, and notification events | In progress | `src/server/reporting` |
-| DailyStallSummary | DailyLocationSummary | Bounded rebuild and dashboard reads from summaries | Staff utilization, service mix, no-show and revisit metrics | In progress | `src/server/reporting` |
-| Google OAuth callback | Google OAuth callback | Supabase PKCE identity plus independent application session | Onboarding or role-specific Beauty destination | In progress | `src/app/auth` |
-| RLS inventory | Beauty RLS inventory | Every exposed business table is enabled and forced RLS | Includes CRM sensitivity and staff/resource overlap | In progress | Supabase advisors and production SQL verification |
+| Organization | Organization | Tenant、billing、entitlement、isolation boundary | 擁有 Location 與 Customer CRM | Complete | `prisma/schema.prisma`, foundation migration |
+| Stall | Location | Parent-child scope consistency | Salon、studio、branch 與 timezone | Complete | foundation migration, RLS pgTAP |
+| Product | Service / Variant / LocationService | Server-owned catalog、交易快照 | Duration、buffer、skills、resources、deposit | Complete | catalog migration, merchant APIs |
+| Order | Booking / Segment | State machine、snapshot、atomic transition | Time ranges、allocation、cancel、reschedule | Complete | booking migration, unit + pgTAP |
+| OrderSession | PublicBookingSession | 高熵 token、hash at rest、短效期限 | Booking policy 與 device scope | Complete | public booking server modules |
+| QR ordering | Public booking | Turnstile、Origin、rate limit、idempotency | Catalog、availability、hold、confirm、manage | Complete | `/api/public/*`, public booking UI |
+| StallMembership | LocationMembership | Membership 是授權依據，client scope 不可信 | FrontDesk 與 ServiceProvider | Complete | authorization modules + tests |
+| AuthSession | AuthSession | 256-bit token、SHA-256 at rest、revoke、expiry | `beauty_session` + session-bound CSRF | Complete | auth modules + role E2E |
+| Plan / Subscription | PlanVersion / Subscription | Versioned contract、server entitlement | Beauty staff/service/resource/CRM limits | Complete | plan migrations + resolver tests |
+| AdditionalStallApproval | OrganizationFeatureOverride | PlatformAdmin、audit、expiry | ALLOW、DENY、LIMIT by Beauty feature key | Complete | admin feature service/API/UI |
+| Payment | BookingPayment / Refund | Minor units、server calculation、audit | Deposit、cancel fee、manual payment | Partial | Payment 可用；Refund UI/provider 尚未完成 |
+| Invoice | SaaS Invoice | 與顧客交易分離 | Phase 1 手動帳務 | Complete | admin billing service/API/UI |
+| Merchant onboarding | MerchantApplication / Setup | State machine、atomic provisioning、audit | Trial、test booking、Go-Live gate | Complete | onboarding/setup services + tests |
+| OperationalEvent | OperationalEvent | Event 只觸發 authoritative refetch | Booking、setup、notification events | Partial | schema/event 可用；Realtime 訂閱待補 |
+| DailyStallSummary | DailyLocationSummary | Bounded rebuild、dashboard summary | 利用率、服務組合、no-show、revisit | Partial | schema/function 可用；dashboard 尚未全面切換 |
+| Google OAuth | Google OAuth callback | Supabase PKCE + application session | 依申請/商家/顧客角色導向 | Partial | 程式完成；正式 provider 憑證待設定 |
+| RLS inventory | Beauty RLS inventory | exposed business tables 強制 RLS | CRM 與 staff/resource overlap | Complete locally | security migration、pgTAP、db lint |
 
 ## Source Decisions
 
-1. The attached master prompt controls domain and completion requirements.
-2. `Stallorder-Platform` commit `ce08b9a` supplies the current stack and security patterns.
-3. `massage-booking-manager` commit `61aa926` supplies behavior only; its
-   Cloudflare, Hono, D1, Drizzle, SQLite, and Google session code is not reused.
-4. The legacy Beauty `pnpm` workspace remains temporarily as migration evidence.
-   The root npm/Next.js application is the production runtime.
+1. 附件 master prompt 控制 domain 與完成條件。
+2. StallOrder 提供安全、租戶、授權、交易與部署模式，不形成 runtime coupling。
+3. `massage-booking-manager` 僅提供產品行為參考，不沿用 Cloudflare D1 / Hono / Drizzle runtime。
+4. Root npm / Next.js application 是 Beauty 的正式 runtime。
 
-## Verification Ledger
+## Status 定義
 
-The status column changes to `Complete` only after the named migration, unit or
-integration test, pgTAP test, and browser flow have actually passed. Commands and
-exit results are recorded in `docs/TEST_PLAN.md`.
+- `Complete`：程式、migration 與對應自動測試已存在，且本機 gate 通過。
+- `Complete locally`：本機已驗證，正式環境 migration/advisor 尚待本輪部署確認。
+- `Partial`：基礎模型或後端已完成，但文件 Evidence 欄所列使用者流程或外部整合仍未完成。
+
+驗證指令與結果記錄於 `docs/TEST_PLAN.md`。

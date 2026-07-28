@@ -109,11 +109,32 @@ export type MerchantWorkspaceData = {
     planName: string;
     periodEnd: string | null;
   } | null;
+  invoices: Array<{
+    id: string;
+    number: string;
+    status: string;
+    totalMinor: number;
+    amountPaidMinor: number;
+    currency: string;
+    dueAt: string | null;
+    createdAt: string;
+  }>;
   setup: {
     lastStep: string;
     goLiveAt: string | null;
     completedSteps: number;
     totalSteps: number;
+    steps: {
+      brand: boolean;
+      location: boolean;
+      businessHours: boolean;
+      service: boolean;
+      staff: boolean;
+      resource: boolean;
+      policies: boolean;
+      notifications: boolean;
+      testBooking: boolean;
+    };
   } | null;
   notificationIntegrations: Array<{
     channel: string;
@@ -184,6 +205,7 @@ export async function getMerchantWorkspaceData(
   const canReadNotificationStatus =
     hasCapability(context.roles, "organization.manage") ||
     hasCapability(context.roles, "booking.manage");
+  const canReadBilling = hasCapability(context.roles, "billing.read");
 
   const [
     locationRecord,
@@ -195,6 +217,7 @@ export async function getMerchantWorkspaceData(
     locationRecords,
     organizationRecord,
     notificationIntegrationRecords,
+    invoiceRecords,
     notificationDeliveryRecords,
   ] = await Promise.all([
     prisma.locations.findUniqueOrThrow({
@@ -451,6 +474,8 @@ export async function getMerchantWorkspaceData(
             resource_completed_at: true,
             policies_completed_at: true,
             notifications_completed_at: true,
+            test_booking_completed_at: true,
+            test_booking_id: true,
           },
         },
       },
@@ -468,6 +493,27 @@ export async function getMerchantWorkspaceData(
             status: true,
             last_verified_at: true,
             last_error_code: true,
+          },
+        })
+      : Promise.resolve([]),
+    canReadBilling
+      ? prisma.invoices.findMany({
+          where: {
+            organization_id: context.organization.id,
+          },
+          orderBy: {
+            created_at: "desc",
+          },
+          take: 50,
+          select: {
+            id: true,
+            invoice_number: true,
+            status: true,
+            total_minor: true,
+            amount_paid_minor: true,
+            currency: true,
+            due_at: true,
+            created_at: true,
           },
         })
       : Promise.resolve([]),
@@ -577,6 +623,7 @@ export async function getMerchantWorkspaceData(
         setup.resource_completed_at,
         setup.policies_completed_at,
         setup.notifications_completed_at,
+        setup.test_booking_completed_at ?? setup.go_live_at,
       ].filter(Boolean).length
     : 0;
 
@@ -679,12 +726,39 @@ export async function getMerchantWorkspaceData(
             subscription.billing_period_end?.toISOString() ?? null,
         }
       : null,
+    invoices: invoiceRecords.map((invoice) => ({
+      id: invoice.id,
+      number: invoice.invoice_number,
+      status: invoice.status,
+      totalMinor: invoice.total_minor,
+      amountPaidMinor: invoice.amount_paid_minor,
+      currency: invoice.currency,
+      dueAt: invoice.due_at?.toISOString() ?? null,
+      createdAt: invoice.created_at.toISOString(),
+    })),
     setup: setup
       ? {
           lastStep: setup.last_step ?? "BRAND",
           goLiveAt: setup.go_live_at?.toISOString() ?? null,
           completedSteps,
-          totalSteps: 8,
+          totalSteps: 9,
+          steps: {
+            brand: Boolean(setup.brand_completed_at),
+            location: Boolean(setup.location_completed_at),
+            businessHours: Boolean(
+              setup.business_hours_completed_at,
+            ),
+            service: Boolean(setup.service_completed_at),
+            staff: Boolean(setup.staff_completed_at),
+            resource: Boolean(setup.resource_completed_at),
+            policies: Boolean(setup.policies_completed_at),
+            notifications: Boolean(
+              setup.notifications_completed_at,
+            ),
+            testBooking: Boolean(
+              setup.test_booking_completed_at ?? setup.go_live_at,
+            ),
+          },
         }
       : null,
     notificationIntegrations: notificationIntegrationRecords.map(

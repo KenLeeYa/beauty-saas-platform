@@ -1,13 +1,7 @@
 import "server-only";
 
 import { prisma } from "../database/prisma";
-
-const AVAILABLE_ORGANIZATION_STATUSES = [
-  "TRIALING",
-  "ACTIVE",
-  "PAST_DUE",
-  "GRACE_PERIOD",
-] as const;
+import { getSessionOrganizationSelections } from "./selection";
 
 export async function resolveSessionDestination(input: {
   profileId: string;
@@ -17,93 +11,30 @@ export async function resolveSessionDestination(input: {
     return "/admin/organizations";
   }
 
-  const organizationMembership =
-    await prisma.organization_memberships.findFirst({
-      where: {
-        profile_id: input.profileId,
-        status: "ACTIVE",
-        organizations: {
-          status: {
-            in: [...AVAILABLE_ORGANIZATION_STATUSES],
-          },
-        },
-      },
-      select: {
-        role: true,
-        organizations: {
-          select: {
-            slug: true,
-            locations: {
-              where: {
-                is_active: true,
-              },
-              select: {
-                slug: true,
-              },
-              orderBy: {
-                created_at: "asc",
-              },
-              take: 1,
-            },
-          },
-        },
-      },
-      orderBy: {
-        created_at: "asc",
-      },
-    });
-
-  if (organizationMembership) {
-    const organizationSlug = organizationMembership.organizations.slug;
-    const locationSlug =
-      organizationMembership.organizations.locations[0]?.slug;
-
-    if (organizationMembership.role === "FINANCE_VIEWER") {
-      return `/merchant/reports?organization=${organizationSlug}`;
-    }
-
-    return locationSlug
-      ? `/merchant/dashboard?organization=${organizationSlug}&location=${locationSlug}`
-      : `/merchant/locations?organization=${organizationSlug}`;
+  const selections = await getSessionOrganizationSelections(input.profileId);
+  if (selections.length > 1) {
+    return "/select-organization";
+  }
+  if (selections.length === 1) {
+    return selections[0].destination;
   }
 
-  const locationMembership = await prisma.location_memberships.findFirst({
-    where: {
-      profile_id: input.profileId,
-      status: "ACTIVE",
-      locations: {
-        is_active: true,
-        organizations: {
-          status: {
-            in: [...AVAILABLE_ORGANIZATION_STATUSES],
-          },
-        },
+  const merchantApplication =
+    await prisma.merchant_applications.findFirst({
+      where: {
+        applicant_profile_id: input.profileId,
       },
-    },
-    select: {
-      role: true,
-      locations: {
-        select: {
-          slug: true,
-          organizations: {
-            select: {
-              slug: true,
-            },
-          },
-        },
+      orderBy: {
+        created_at: "desc",
       },
-    },
-    orderBy: {
-      created_at: "asc",
-    },
-  });
-
-  if (locationMembership) {
-    if (locationMembership.role === "SERVICE_PROVIDER") {
-      return `/staff/${locationMembership.locations.slug}`;
-    }
-
-    return `/merchant/calendar?organization=${locationMembership.locations.organizations.slug}&location=${locationMembership.locations.slug}`;
+      select: {
+        status: true,
+      },
+    });
+  if (merchantApplication) {
+    return ["DRAFT", "NEEDS_INFO"].includes(merchantApplication.status)
+      ? "/onboarding/edit"
+      : "/onboarding/status";
   }
 
   const publicLocation = await prisma.locations.findFirst({

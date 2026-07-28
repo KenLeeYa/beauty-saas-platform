@@ -2,6 +2,7 @@ import { Building2, CalendarDays, MapPin, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 import { LogoutButton } from "./logout-button";
+import { PlatformNavigation } from "./platform-navigation";
 import type { PlatformOverviewData } from "@/server/admin/data";
 
 const statusLabels: Readonly<Record<string, string>> = {
@@ -64,6 +65,7 @@ export function PlatformOverview({
           </div>
         </div>
       </header>
+      <PlatformNavigation />
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
         <section
@@ -108,6 +110,7 @@ export function PlatformOverview({
                   <th className="px-4 py-3 font-semibold">分店</th>
                   <th className="px-4 py-3 font-semibold">成員</th>
                   <th className="px-4 py-3 font-semibold">預約</th>
+                  <th className="px-4 py-3 font-semibold">功能</th>
                   <th className="px-4 py-3 font-semibold">入口</th>
                 </tr>
               </thead>
@@ -115,9 +118,12 @@ export function PlatformOverview({
                 {data.organizations.map((organization) => (
                   <tr key={organization.id}>
                     <td className="px-4 py-3">
-                      <p className="font-semibold text-ink">
+                      <Link
+                        className="font-semibold text-ink hover:text-teal hover:underline"
+                        href={`/admin/organizations/${organization.id}`}
+                      >
                         {organization.name}
-                      </p>
+                      </Link>
                       <p className="mt-1 text-xs text-slate-500">
                         {organization.slug}
                       </p>
@@ -137,6 +143,14 @@ export function PlatformOverview({
                     </td>
                     <td className="px-4 py-3 text-slate-700">
                       {organization.bookingCount}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        className="font-semibold text-teal hover:underline"
+                        href={`/admin/organizations/${organization.id}/features`}
+                      >
+                        權益設定
+                      </Link>
                     </td>
                     <td className="px-4 py-3">
                       <Link
