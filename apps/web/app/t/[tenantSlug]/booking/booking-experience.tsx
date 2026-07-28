@@ -1,7 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { PublicBooking, PublicBookingOptions } from "@beauty-saas/shared";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type {
+  ApiResponse,
+  PublicBooking,
+  PublicBookingCalendarDay,
+  PublicBookingCalendarSlot,
+  PublicBookingOptions,
+  PublicBookingSlotStatus
+} from "@beauty-saas/shared";
 
 type BookingStep = "service" | "time" | "customer" | "done";
 
@@ -37,6 +44,26 @@ const bookingSteps: Array<{ key: BookingStep; label: string }> = [
   { key: "done", label: "完成" }
 ];
 
+const slotStatusLabels: Record<PublicBookingSlotStatus, string> = {
+  AVAILABLE: "可預約",
+  BOOKED: "已被預約",
+  CLOSED: "不開放"
+};
+
+async function readApiData<TData>(response: Response): Promise<TData> {
+  const payload = (await response.json()) as ApiResponse<TData>;
+
+  if (!response.ok || !payload.success) {
+    throw new Error(payload.success ? "API request failed." : payload.error.message);
+  }
+
+  return payload.data;
+}
+
+function firstAvailableSlot(day: PublicBookingCalendarDay | undefined): PublicBookingCalendarSlot | undefined {
+  return day?.slots.find((slot) => slot.status === "AVAILABLE");
+}
+
 function currency(value: number): string {
   return new Intl.NumberFormat("zh-TW", {
     style: "currency",
@@ -56,12 +83,25 @@ function stepState(step: BookingStep, current: BookingStep): "active" | "done" |
 
 export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
   const [options, setOptions] = useState<PublicBookingOptions | null>(null);
+  const [calendar, setCalendar] = useState<PublicBookingCalendarDay[]>([]);
   const [form, setForm] = useState<BookingForm>(emptyForm);
   const [step, setStep] = useState<BookingStep>("service");
   const [booking, setBooking] = useState<PublicBooking | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCalendarLoading, setIsCalendarLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchCalendar = useCallback(
+    async (branchId: string, staffId: string): Promise<PublicBookingCalendarDay[]> => {
+      const params = new URLSearchParams({ branchId, staffId });
+      const response = await fetch(`${apiBaseUrl}/public/tenants/${tenantSlug}/booking/calendar?${params.toString()}`, {
+        cache: "no-store"
+      });
+      return readApiData<PublicBookingCalendarDay[]>(response);
+    },
+    [tenantSlug]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -72,12 +112,7 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
 
       try {
         const response = await fetch(`${apiBaseUrl}/public/tenants/${tenantSlug}/booking/options`);
-        if (!response.ok) {
-          throw new Error("無法載入店家訂位資訊。");
-        }
-
-        const payload = await response.json();
-        const data = payload.data as PublicBookingOptions;
+        const data = await readApiData<PublicBookingOptions>(response);
 
         if (!isMounted) return;
         setOptions(data);
@@ -86,8 +121,8 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
           branchId: current.branchId || data.branches[0]?.id || "",
           serviceId: current.serviceId || data.services[0]?.id || "",
           staffId: current.staffId || data.staff[0]?.id || "staff-any",
-          date: current.date || data.availableDates[0]?.date || "",
-          time: current.time || data.availableDates[0]?.slots[0] || ""
+          date: "",
+          time: ""
         }));
       } catch (cause) {
         if (!isMounted) return;
@@ -104,10 +139,63 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
     };
   }, [tenantSlug]);
 
+  useEffect(() => {
+    if (!form.branchId || !form.staffId) {
+      setCalendar([]);
+      return;
+    }
+
+    let isMounted = true;
+    const branchId = form.branchId;
+    const staffId = form.staffId;
+
+    async function loadCalendar() {
+      setIsCalendarLoading(true);
+      setError(null);
+
+      try {
+        const data = await fetchCalendar(branchId, staffId);
+        if (!isMounted) return;
+
+        setCalendar(data);
+        setForm((current) => {
+          if (current.branchId !== branchId || current.staffId !== staffId) {
+            return current;
+          }
+
+          const currentDay = data.find((day) => day.date === current.date);
+          const selectedDay = currentDay && firstAvailableSlot(currentDay) ? currentDay : data.find((day) => firstAvailableSlot(day));
+          const currentSlot = selectedDay?.slots.find(
+            (slot) => slot.time === current.time && slot.status === "AVAILABLE"
+          );
+          const selectedSlot = currentSlot ?? firstAvailableSlot(selectedDay);
+
+          return {
+            ...current,
+            date: selectedDay?.date ?? "",
+            time: selectedSlot?.time ?? ""
+          };
+        });
+      } catch (cause) {
+        if (!isMounted) return;
+        setCalendar([]);
+        setError(cause instanceof Error ? cause.message : "載入可預約時段時發生錯誤。");
+      } finally {
+        if (isMounted) setIsCalendarLoading(false);
+      }
+    }
+
+    void loadCalendar();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchCalendar, form.branchId, form.staffId]);
+
   const selectedBranch = useMemo(() => options?.branches.find((branch) => branch.id === form.branchId), [form.branchId, options]);
   const selectedService = useMemo(() => options?.services.find((service) => service.id === form.serviceId), [form.serviceId, options]);
   const selectedStaff = useMemo(() => options?.staff.find((staff) => staff.id === form.staffId), [form.staffId, options]);
-  const selectedDate = useMemo(() => options?.availableDates.find((date) => date.date === form.date), [form.date, options]);
+  const selectedDate = useMemo(() => calendar.find((date) => date.date === form.date), [calendar, form.date]);
 
   function updateForm(next: Partial<BookingForm>) {
     setForm((current) => ({ ...current, ...next }));
@@ -133,14 +221,15 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
           note: form.note.trim()
         })
       });
-
-      if (!response.ok) {
-        throw new Error("送出預約失敗，請確認資料後再試一次。");
-      }
-
-      const payload = await response.json();
-      setBooking(payload.data as PublicBooking);
+      const createdBooking = await readApiData<PublicBooking>(response);
+      setBooking(createdBooking);
       setStep("done");
+
+      try {
+        setCalendar(await fetchCalendar(form.branchId, form.staffId));
+      } catch {
+        setError("預約已完成，但時段狀態暫時無法更新，請重新整理頁面。");
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "送出預約時發生錯誤。");
     } finally {
@@ -302,33 +391,49 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
                 ))}
               </div>
 
-              <div className="grid gap-3 md:grid-cols-4">
-                {options.availableDates.map((date) => (
-                  <button
-                    key={date.date}
-                    type="button"
-                    className={`rounded-lg border px-4 py-3 text-left ${
-                      form.date === date.date ? "border-gold bg-amber-50" : "border-slate-200 bg-white hover:border-gold"
-                    }`}
-                    onClick={() => updateForm({ date: date.date, time: date.slots[0] ?? "" })}
-                  >
-                    <span className="font-semibold text-ink">{date.label}</span>
-                    <span className="mt-1 block text-xs text-slate-500">{date.slots.length} 個可約時段</span>
-                  </button>
-                ))}
-              </div>
+              {isCalendarLoading ? <div className="h-28 animate-pulse rounded-lg bg-slate-100" /> : null}
+
+              {!isCalendarLoading ? (
+                <div className="grid gap-3 md:grid-cols-4">
+                  {calendar.map((date) => {
+                    const availableSlots = date.slots.filter((slot) => slot.status === "AVAILABLE");
+
+                    return (
+                      <button
+                        key={date.date}
+                        type="button"
+                        className={`rounded-lg border px-4 py-3 text-left ${
+                          form.date === date.date ? "border-gold bg-amber-50" : "border-slate-200 bg-white hover:border-gold"
+                        }`}
+                        onClick={() => updateForm({ date: date.date, time: availableSlots[0]?.time ?? "" })}
+                      >
+                        <span className="font-semibold text-ink">{date.label}</span>
+                        <span className="mt-1 block text-xs text-slate-500">{availableSlots.length} 個可預約時段</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {(selectedDate?.slots ?? []).map((slot) => (
                   <button
-                    key={slot}
+                    key={`${slot.date}-${slot.time}`}
                     type="button"
-                    className={`rounded-md border px-4 py-3 text-sm font-semibold ${
-                      form.time === slot ? "border-ink bg-ink text-white" : "border-slate-200 bg-white text-ink hover:border-ink"
-                    }`}
-                    onClick={() => updateForm({ time: slot })}
+                    className={`rounded-md border px-4 py-3 text-left text-sm font-semibold ${
+                      form.time === slot.time
+                        ? "border-ink bg-ink text-white"
+                        : slot.status === "BOOKED"
+                          ? "border-amber-200 bg-amber-50 text-amber-800"
+                          : slot.status === "CLOSED"
+                            ? "border-slate-200 bg-slate-100 text-slate-500"
+                            : "border-slate-200 bg-white text-ink hover:border-ink"
+                    } disabled:cursor-not-allowed`}
+                    disabled={slot.status !== "AVAILABLE"}
+                    onClick={() => updateForm({ time: slot.time })}
                   >
-                    {slot}
+                    <span>{slot.time}</span>
+                    <span className="mt-1 block text-xs font-medium">{slotStatusLabels[slot.status]}</span>
                   </button>
                 ))}
               </div>
@@ -337,7 +442,12 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
                 <button className="rounded-md border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700" type="button" onClick={() => setStep("service")}>
                   上一步
                 </button>
-                <button className="rounded-md bg-ink px-5 py-3 text-sm font-semibold text-white" type="button" onClick={() => setStep("customer")}>
+                <button
+                  className="rounded-md bg-ink px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!form.date || !form.time || isCalendarLoading}
+                  type="button"
+                  onClick={() => setStep("customer")}
+                >
                   下一步
                 </button>
               </div>
@@ -404,7 +514,11 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
                 <button className="rounded-md border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700" type="button" onClick={() => setStep("time")}>
                   上一步
                 </button>
-                <button className="rounded-md bg-coral px-5 py-3 text-sm font-semibold text-white disabled:opacity-60" type="submit" disabled={isSubmitting}>
+                <button
+                  className="rounded-md bg-coral px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                  type="submit"
+                  disabled={!form.date || !form.time || isSubmitting}
+                >
                   {isSubmitting ? "送出中" : "送出預約"}
                 </button>
               </div>
@@ -422,8 +536,17 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
                 className="rounded-md bg-ink px-5 py-3 text-sm font-semibold text-white"
                 type="button"
                 onClick={() => {
+                  const availableDay = calendar.find((day) => firstAvailableSlot(day));
+                  const availableSlot = firstAvailableSlot(availableDay);
                   setBooking(null);
-                  setForm(emptyForm);
+                  setForm({
+                    ...emptyForm,
+                    branchId: options.branches[0]?.id ?? "",
+                    serviceId: options.services[0]?.id ?? "",
+                    staffId: options.staff[0]?.id ?? "staff-any",
+                    date: availableDay?.date ?? "",
+                    time: availableSlot?.time ?? ""
+                  });
                   setStep("service");
                 }}
               >
