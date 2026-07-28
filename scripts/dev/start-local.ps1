@@ -42,7 +42,7 @@ $node = Get-CommandExecutable "node"
 $nextCli = Join-Path $root "node_modules\next\dist\bin\next"
 $webProcess = Start-Process `
   -FilePath $node `
-  -ArgumentList @($nextCli, "dev", "--hostname", "0.0.0.0", "--port", "$webPort") `
+  -ArgumentList @("`"$nextCli`"", "dev", "--hostname", "0.0.0.0", "--port", "$webPort") `
   -WorkingDirectory $root `
   -RedirectStandardOutput (Join-Path $logDir "web.log") `
   -RedirectStandardError (Join-Path $logDir "web.err.log") `

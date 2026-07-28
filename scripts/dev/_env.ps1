@@ -115,7 +115,9 @@ function Sync-LocalEnvFile {
     "PAYMENT_PROVIDER=manual",
     "NOTIFICATION_PROVIDER=disabled"
   )
-  Set-Content -LiteralPath $localEnv -Value $contents -Encoding utf8
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  $content = ($contents -join [Environment]::NewLine) + [Environment]::NewLine
+  [System.IO.File]::WriteAllText($localEnv, $content, $utf8NoBom)
   Write-Host "Synchronized .env.local with the running local Supabase stack."
 }
 
