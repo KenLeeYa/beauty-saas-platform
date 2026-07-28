@@ -4,7 +4,7 @@ import { PublicBookingFlow } from "@/components/public-booking-flow";
 import { getCurrentSession } from "@/server/auth/session";
 import { AppError } from "@/server/http/errors";
 import { getPublicBooking } from "@/server/public-booking/booking";
-import { getPublicCatalog } from "@/server/public-booking/catalog";
+import { getCachedPublicCatalog } from "@/server/public-booking/catalog";
 import { getServerEnv } from "@/server/env";
 import {
   addLocalDays,
@@ -27,16 +27,19 @@ export default async function PublicBookingPage({
   params,
   searchParams,
 }: PageProps) {
-  const route = await params;
-  const query = await searchParams;
-  let catalog: Awaited<ReturnType<typeof getPublicCatalog>>;
+  const [route, query] = await Promise.all([params, searchParams]);
+  let catalog: Awaited<ReturnType<typeof getCachedPublicCatalog>>;
   let rescheduleBooking: Awaited<ReturnType<typeof getPublicBooking>> | null;
+  let session: Awaited<ReturnType<typeof getCurrentSession>>;
 
   try {
-    catalog = await getPublicCatalog(route);
-    rescheduleBooking = query.reschedule
-      ? await getPublicBooking(query.reschedule)
-      : null;
+    [catalog, rescheduleBooking, session] = await Promise.all([
+      getCachedPublicCatalog(route),
+      query.reschedule
+        ? getPublicBooking(query.reschedule)
+        : Promise.resolve(null),
+      getCurrentSession(),
+    ]);
     if (
       rescheduleBooking &&
       (!rescheduleBooking.booking.customerActions.rescheduleEnabled ||
@@ -83,7 +86,6 @@ export default async function PublicBookingPage({
   const initialDate =
     calendarDays.find((day) => day.availableCount > 0)?.date ?? today;
   const env = getServerEnv();
-  const session = await getCurrentSession();
 
   return (
     <PublicBookingFlow

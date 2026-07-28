@@ -1,5 +1,7 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+
 import { prisma } from "../database/prisma";
 import { AppError } from "../http/errors";
 import { databaseTimeToString } from "../time/timezone";
@@ -60,6 +62,26 @@ export async function getPublicCatalog(
 ): Promise<PublicCatalog> {
   const context = await resolvePublicLocation(input);
   return getPublicCatalogForContext(context);
+}
+
+const getCachedPublicCatalogBySlug = unstable_cache(
+  async (organizationSlug: string, locationSlug: string) =>
+    getPublicCatalog({ organizationSlug, locationSlug }),
+  ["public-booking-catalog"],
+  {
+    revalidate: 30,
+    tags: ["public-booking-catalog"],
+  },
+);
+
+export async function getCachedPublicCatalog(input: {
+  organizationSlug: string;
+  locationSlug: string;
+}): Promise<PublicCatalog> {
+  return getCachedPublicCatalogBySlug(
+    input.organizationSlug,
+    input.locationSlug,
+  );
 }
 
 export async function getPublicCatalogForContext(

@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { jsonError, jsonSuccess } from "@/server/http/response";
-import { getPublicCatalog } from "@/server/public-booking/catalog";
+import { getCachedPublicCatalog } from "@/server/public-booking/catalog";
 import { publicLocationSchema } from "@/server/public-booking/schemas";
 import { getRequestId } from "@/server/security/request";
 
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       ),
       locationSlug: request.nextUrl.searchParams.get("locationSlug"),
     });
-    const catalog = await getPublicCatalog(input);
+    const catalog = await getCachedPublicCatalog(input);
 
     return jsonSuccess(catalog, {
       headers: {
