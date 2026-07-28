@@ -76,6 +76,7 @@ const requiredEnvironment = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
+  "NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED",
   "SESSION_SECRET",
   "CSRF_SECRET",
   "ABUSE_HASH_SECRET",
@@ -105,6 +106,9 @@ if (process.env.APP_ENV === "production") {
   }
   if (process.env.TURNSTILE_ALLOW_TEST_KEYS !== "false") {
     failures.push("TURNSTILE_ALLOW_TEST_KEYS must be false in production.");
+  }
+  if (process.env.NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED !== "true") {
+    failures.push("NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED must be true in production.");
   }
   for (const name of [
     "SESSION_SECRET",

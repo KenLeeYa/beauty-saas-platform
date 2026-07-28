@@ -43,10 +43,12 @@ const getServerHydrationSnapshot = () => false;
 
 export function LoginForm({
   googleEnabled,
+  initialError,
   localAuthEnabled,
   nextPath,
 }: {
   googleEnabled: boolean;
+  initialError?: string;
   localAuthEnabled: boolean;
   nextPath?: string;
 }) {
@@ -64,7 +66,7 @@ export function LoginForm({
     getServerHydrationSnapshot,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
 
   async function submitLogin(): Promise<void> {
     setIsSubmitting(true);

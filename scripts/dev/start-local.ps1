@@ -21,6 +21,7 @@ if (Test-Path -LiteralPath $pidFile) {
 }
 
 $npx = Get-CommandExecutable "npx"
+$null = Import-LocalGoogleOAuthEnvironment
 $previousErrorAction = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 & $npx supabase status *> $null

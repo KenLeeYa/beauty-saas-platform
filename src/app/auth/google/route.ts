@@ -1,17 +1,13 @@
 import { NextResponse } from "next/server";
 
-import { isGoogleLoginEnabled, createSupabaseAuthClient } from "@/server/auth/supabase";
+import { normalizeRelativeRedirect } from "@/server/auth/oauth";
+import {
+  createSupabaseAuthClient,
+  isGoogleLoginEnabled,
+} from "@/server/auth/supabase";
 import { getServerEnv } from "@/server/env";
 import { consumeRateLimit } from "@/server/security/rate-limit";
-import {
-  getTrustedClientIdentifier,
-} from "@/server/security/request";
-
-function safeNext(value: string | null): string {
-  return value && value.startsWith("/") && !value.startsWith("//")
-    ? value.slice(0, 500)
-    : "/";
-}
+import { getTrustedClientIdentifier } from "@/server/security/request";
 
 export async function GET(request: Request): Promise<NextResponse> {
   const env = getServerEnv();
@@ -30,7 +26,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     });
 
     const requestUrl = new URL(request.url);
-    const next = safeNext(requestUrl.searchParams.get("next"));
+    const next =
+      normalizeRelativeRedirect(requestUrl.searchParams.get("next")) ?? "/";
     const supabase = await createSupabaseAuthClient();
     const redirectTo = `${appOrigin}/auth/callback?next=${encodeURIComponent(next)}`;
     const { data, error } = await supabase.auth.signInWithOAuth({

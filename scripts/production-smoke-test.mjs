@@ -57,6 +57,39 @@ if (!login || login.status !== 200) {
   }
 }
 
+const oauthStart = await request("/auth/google", { redirect: "manual" });
+const oauthLocation = oauthStart?.headers.get("location");
+if (
+  !oauthStart ||
+  ![302, 303, 307, 308].includes(oauthStart.status) ||
+  !oauthLocation
+) {
+  failures.push("/auth/google: expected a redirect to Supabase Auth");
+} else {
+  const authorizeUrl = new URL(oauthLocation);
+  if (
+    authorizeUrl.pathname !== "/auth/v1/authorize" ||
+    authorizeUrl.searchParams.get("provider") !== "google"
+  ) {
+    failures.push("/auth/google: Supabase Google authorization URL is invalid");
+  } else {
+    const provider = await request(authorizeUrl.toString(), {
+      redirect: "manual",
+    });
+    const providerLocation = provider?.headers.get("location");
+    if (
+      !provider ||
+      ![302, 303, 307, 308].includes(provider.status) ||
+      !providerLocation ||
+      new URL(providerLocation).hostname !== "accounts.google.com"
+    ) {
+      failures.push(
+        "/auth/google: Supabase Google provider is disabled or misconfigured",
+      );
+    }
+  }
+}
+
 const booking = await request("/book/preview/taipei");
 if (!booking || booking.status !== 200) {
   failures.push(

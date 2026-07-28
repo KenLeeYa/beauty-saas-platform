@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { recordAudit } from "@/server/audit";
 import { resolveSessionDestination } from "@/server/auth/destination";
 import { authenticateLocalUser } from "@/server/auth/local-auth";
+import { normalizeRelativeRedirect } from "@/server/auth/oauth";
 import {
   createApplicationSession,
   setSessionCookies,
@@ -17,12 +18,6 @@ import {
   getTrustedClientIdentifier,
   hashAbuseIdentifier,
 } from "@/server/security/request";
-
-function safeNext(value: string | null): string | null {
-  return value && value.startsWith("/") && !value.startsWith("//")
-    ? value.slice(0, 500)
-    : null;
-}
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const requestId = getRequestId(request);
@@ -65,7 +60,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       userAgent: request.headers.get("user-agent"),
       ipIdentifier: clientIdentifier,
     });
-    const requestedNext = safeNext(request.nextUrl.searchParams.get("next"));
+    const requestedNext = normalizeRelativeRedirect(
+      request.nextUrl.searchParams.get("next"),
+    );
     const destination =
       requestedNext ??
       (await resolveSessionDestination({

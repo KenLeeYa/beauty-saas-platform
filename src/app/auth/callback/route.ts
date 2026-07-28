@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import { recordAudit } from "@/server/audit";
 import { resolveSessionDestination } from "@/server/auth/destination";
 import {
+  getOAuthCallbackErrorCode,
+  normalizeRelativeRedirect,
+} from "@/server/auth/oauth";
+import {
   createApplicationSession,
   setSessionCookies,
 } from "@/server/auth/session";
@@ -15,18 +19,14 @@ import {
   hashAbuseIdentifier,
 } from "@/server/security/request";
 
-function safeNext(value: string | null): string | null {
-  return value && value.startsWith("/") && !value.startsWith("//")
-    ? value.slice(0, 500)
-    : null;
-}
-
 export async function GET(request: Request): Promise<NextResponse> {
   const env = getServerEnv();
   const appOrigin = new URL(env.NEXT_PUBLIC_APP_URL).origin;
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
-  const requestedNext = safeNext(requestUrl.searchParams.get("next"));
+  const requestedNext = normalizeRelativeRedirect(
+    requestUrl.searchParams.get("next"),
+  );
   const requestId = getRequestId(request);
   const clientIdentifier = getTrustedClientIdentifier(request);
 
@@ -84,12 +84,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     });
     return response;
   } catch (error) {
-    const code =
-      error instanceof Error && error.message.includes("衝突")
-        ? "account-conflict"
-        : error instanceof Error && error.message.includes("停用")
-          ? "account-disabled"
-          : "callback-failed";
+    const code = getOAuthCallbackErrorCode(error);
     return NextResponse.redirect(`${appOrigin}/?oauthError=${code}`);
   }
 }

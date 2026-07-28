@@ -3,26 +3,26 @@ import { redirect } from "next/navigation";
 
 import { LoginForm } from "@/components/login-form";
 import { resolveSessionDestination } from "@/server/auth/destination";
+import {
+  getOAuthErrorMessage,
+  normalizeRelativeRedirect,
+} from "@/server/auth/oauth";
 import { getCurrentSession } from "@/server/auth/session";
 import { getServerEnv } from "@/server/env";
 
 export const dynamic = "force-dynamic";
-
-function safeNext(value: string | undefined): string | undefined {
-  return value && value.startsWith("/") && !value.startsWith("//")
-    ? value.slice(0, 500)
-    : undefined;
-}
 
 export default async function HomePage({
   searchParams,
 }: {
   searchParams: Promise<{
     next?: string;
+    oauthError?: string;
   }>;
 }) {
   const session = await getCurrentSession();
-  const requestedNext = safeNext((await searchParams).next);
+  const params = await searchParams;
+  const requestedNext = normalizeRelativeRedirect(params.next) ?? undefined;
   if (session) {
     redirect(
       requestedNext ??
@@ -64,6 +64,7 @@ export default async function HomePage({
           localAuthEnabled={
             env.ENABLE_LOCAL_AUTH_STUB && env.APP_ENV !== "production"
           }
+          initialError={getOAuthErrorMessage(params.oauthError)}
           nextPath={requestedNext}
         />
       </section>

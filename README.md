@@ -9,7 +9,7 @@
 - 入駐：商家申請、平台審核、Trial 開通、設定精靈、測試預約與正式營業。
 - 平台：商家管理、方案檢視、功能權益覆寫、手動 SaaS 發票與停復權。
 - 通知：站內通知，並保留 LINE、Resend Email 的可替換 adapter。
-- 安全：Supabase Auth、獨立應用 Session、CSRF、Turnstile、Rate Limit、RLS 與 Audit Log。
+- 安全：Supabase Auth（Email 與 Google OAuth）、獨立應用 Session、CSRF、Turnstile、Rate Limit、RLS 與 Audit Log。
 
 ## 技術架構
 
@@ -65,4 +65,4 @@ npm run test:e2e
 
 ## 文件
 
-從 [架構](docs/ARCHITECTURE.md)、[資料庫](docs/DATABASE_SCHEMA.md)、[安全](docs/SECURITY.md)、[測試計畫](docs/TEST_PLAN.md) 與 [正式上線檢查表](docs/GO_LIVE_CHECKLIST.md) 開始。
+從 [架構](docs/ARCHITECTURE.md)、[資料庫](docs/DATABASE_SCHEMA.md)、[安全](docs/SECURITY.md)、[Google OAuth](docs/GOOGLE_OAUTH.md)、[測試計畫](docs/TEST_PLAN.md) 與 [正式上線檢查表](docs/GO_LIVE_CHECKLIST.md) 開始。

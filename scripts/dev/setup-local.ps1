@@ -10,6 +10,7 @@ Assert-CommandExists "npx"
 
 $npm = Get-CommandExecutable "npm"
 $npx = Get-CommandExecutable "npx"
+$null = Import-LocalGoogleOAuthEnvironment
 
 Write-Host "Installing dependencies..."
 & $npm install

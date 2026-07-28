@@ -41,9 +41,37 @@ function Get-CommandExecutable {
   return $command.Source
 }
 
+function Import-LocalGoogleOAuthEnvironment {
+  $root = Get-RepoRoot
+  $oauthEnv = Join-Path $root ".env.oauth.local"
+  if (-not (Test-Path -LiteralPath $oauthEnv)) {
+    return $false
+  }
+
+  $values = @{}
+  foreach ($line in Get-Content -LiteralPath $oauthEnv -Encoding UTF8) {
+    if ($line -match '^([A-Z0-9_]+)=(.*)$') {
+      $values[$matches[1]] = $matches[2].Trim()
+    }
+  }
+
+  foreach ($required in @(
+    "SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID",
+    "SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET"
+  )) {
+    if (-not $values[$required]) {
+      throw "$oauthEnv is missing $required."
+    }
+    Set-Item -Path "Env:$required" -Value $values[$required]
+  }
+
+  return $true
+}
+
 function Sync-LocalEnvFile {
   $root = Get-RepoRoot
   $localEnv = Join-Path $root ".env.local"
+  $developmentEnv = Join-Path $root ".env.development.local"
   $npx = Get-CommandExecutable "npx"
   $previousErrorAction = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
@@ -76,6 +104,14 @@ function Sync-LocalEnvFile {
   if ($localAddress) {
     $origins += "http://$($localAddress):$webPort"
   }
+  $googleLoginEnabled = if (
+    $env:SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID -and
+    $env:SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET
+  ) {
+    "true"
+  } else {
+    "false"
+  }
 
   $contents = @(
     "NODE_ENV=development",
@@ -91,7 +127,7 @@ function Sync-LocalEnvFile {
     "NEXT_PUBLIC_SUPABASE_URL=$($values.API_URL)",
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$($values.PUBLISHABLE_KEY)",
     "SUPABASE_SERVICE_ROLE_KEY=$($values.SERVICE_ROLE_KEY)",
-    "NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED=false",
+    "NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED=$googleLoginEnabled",
     "",
     "SESSION_SECRET=local-only-session-secret-beauty-saas-2026",
     "CSRF_SECRET=local-only-csrf-secret-beauty-saas-2026",
@@ -118,7 +154,8 @@ function Sync-LocalEnvFile {
   $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
   $content = ($contents -join [Environment]::NewLine) + [Environment]::NewLine
   [System.IO.File]::WriteAllText($localEnv, $content, $utf8NoBom)
-  Write-Host "Synchronized .env.local with the running local Supabase stack."
+  [System.IO.File]::WriteAllText($developmentEnv, $content, $utf8NoBom)
+  Write-Host "Synchronized local Next.js environment files with the running Supabase stack."
 }
 
 function Get-DevLogDir {
