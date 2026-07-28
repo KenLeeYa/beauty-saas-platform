@@ -1,5 +1,14 @@
 "use client";
 
+import {
+  Building2,
+  Check,
+  CheckCircle2,
+  Clock3,
+  MapPin,
+  Sparkles,
+  UserRound
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ApiResponse,
@@ -9,8 +18,10 @@ import type {
   PublicBookingOptions,
   PublicBookingSlotStatus
 } from "@beauty-saas/shared";
+import { AppHeader } from "../../../../components/app-header";
+import { MonthCalendar, type MonthCalendarDay } from "../../../../components/month-calendar";
 
-type BookingStep = "service" | "time" | "customer" | "done";
+type BookingStep = "service" | "schedule" | "details" | "done";
 
 type BookingForm = {
   branchId: string;
@@ -24,23 +35,12 @@ type BookingForm = {
   note: string;
 };
 
-const emptyForm: BookingForm = {
-  branchId: "",
-  serviceId: "",
-  staffId: "staff-any",
-  date: "",
-  time: "",
-  customerName: "",
-  customerPhone: "",
-  customerEmail: "",
-  note: ""
-};
-
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+
 const bookingSteps: Array<{ key: BookingStep; label: string }> = [
   { key: "service", label: "服務" },
-  { key: "time", label: "時間" },
-  { key: "customer", label: "資料" },
+  { key: "schedule", label: "日期時間" },
+  { key: "details", label: "聯絡資料" },
   { key: "done", label: "完成" }
 ];
 
@@ -72,19 +72,41 @@ function currency(value: number): string {
   }).format(value);
 }
 
-function stepState(step: BookingStep, current: BookingStep): "active" | "done" | "idle" {
-  const order: BookingStep[] = ["service", "time", "customer", "done"];
-  const stepIndex = order.indexOf(step);
-  const currentIndex = order.indexOf(current);
-  if (stepIndex === currentIndex) return "active";
-  if (stepIndex < currentIndex) return "done";
-  return "idle";
+function calendarSummary(days: PublicBookingCalendarDay[]): MonthCalendarDay[] {
+  return days.map((day) => ({
+    date: day.date,
+    availableCount: day.slots.filter((slot) => slot.status === "AVAILABLE").length,
+    bookedCount: day.slots.filter((slot) => slot.status === "BOOKED").length,
+    closedCount: day.slots.filter((slot) => slot.status === "CLOSED").length
+  }));
 }
 
-export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
+function stepIndex(step: BookingStep): number {
+  return bookingSteps.findIndex((item) => item.key === step);
+}
+
+export function BookingExperience({
+  tenantSlug,
+  customerName,
+  customerEmail
+}: {
+  tenantSlug: string;
+  customerName: string;
+  customerEmail: string;
+}) {
   const [options, setOptions] = useState<PublicBookingOptions | null>(null);
   const [calendar, setCalendar] = useState<PublicBookingCalendarDay[]>([]);
-  const [form, setForm] = useState<BookingForm>(emptyForm);
+  const [form, setForm] = useState<BookingForm>(() => ({
+    branchId: "",
+    serviceId: "",
+    staffId: "staff-any",
+    date: "",
+    time: "",
+    customerName,
+    customerPhone: "",
+    customerEmail,
+    note: ""
+  }));
   const [step, setStep] = useState<BookingStep>("service");
   const [booking, setBooking] = useState<PublicBooking | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -111,22 +133,20 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
       setError(null);
 
       try {
-        const response = await fetch(`${apiBaseUrl}/public/tenants/${tenantSlug}/booking/options`);
+        const response = await fetch(`${apiBaseUrl}/public/tenants/${tenantSlug}/booking/options`, { cache: "no-store" });
         const data = await readApiData<PublicBookingOptions>(response);
-
         if (!isMounted) return;
+
         setOptions(data);
         setForm((current) => ({
           ...current,
-          branchId: current.branchId || data.branches[0]?.id || "",
-          serviceId: current.serviceId || data.services[0]?.id || "",
-          staffId: current.staffId || data.staff[0]?.id || "staff-any",
-          date: "",
-          time: ""
+          branchId: data.branches[0]?.id ?? "",
+          serviceId: data.services[0]?.id ?? "",
+          staffId: data.staff[0]?.id ?? "staff-any"
         }));
       } catch (cause) {
         if (!isMounted) return;
-        setError(cause instanceof Error ? cause.message : "載入訂位資訊時發生錯誤。");
+        setError(cause instanceof Error ? cause.message : "載入店家資料時發生錯誤。");
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -159,9 +179,7 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
 
         setCalendar(data);
         setForm((current) => {
-          if (current.branchId !== branchId || current.staffId !== staffId) {
-            return current;
-          }
+          if (current.branchId !== branchId || current.staffId !== staffId) return current;
 
           const currentDay = data.find((day) => day.date === current.date);
           const selectedDay = currentDay && firstAvailableSlot(currentDay) ? currentDay : data.find((day) => firstAvailableSlot(day));
@@ -195,10 +213,25 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
   const selectedBranch = useMemo(() => options?.branches.find((branch) => branch.id === form.branchId), [form.branchId, options]);
   const selectedService = useMemo(() => options?.services.find((service) => service.id === form.serviceId), [form.serviceId, options]);
   const selectedStaff = useMemo(() => options?.staff.find((staff) => staff.id === form.staffId), [form.staffId, options]);
-  const selectedDate = useMemo(() => calendar.find((date) => date.date === form.date), [calendar, form.date]);
+  const selectedDate = useMemo(() => calendar.find((day) => day.date === form.date), [calendar, form.date]);
+  const monthDays = useMemo(() => calendarSummary(calendar), [calendar]);
+  const currentStepIndex = stepIndex(step);
 
   function updateForm(next: Partial<BookingForm>) {
     setForm((current) => ({ ...current, ...next }));
+  }
+
+  function selectDate(date: string) {
+    const day = calendar.find((item) => item.date === date);
+    const slot = firstAvailableSlot(day);
+    updateForm({ date, time: slot?.time ?? "" });
+  }
+
+  function goToStep(nextStep: BookingStep) {
+    if (nextStep === "done" && !booking) return;
+    if (stepIndex(nextStep) <= currentStepIndex) {
+      setStep(nextStep);
+    }
   }
 
   async function submitBooking() {
@@ -237,11 +270,26 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
     }
   }
 
+  function startAnotherBooking() {
+    const availableDay = calendar.find((day) => firstAvailableSlot(day));
+    const availableSlot = firstAvailableSlot(availableDay);
+    setBooking(null);
+    setForm((current) => ({
+      ...current,
+      date: availableDay?.date ?? "",
+      time: availableSlot?.time ?? "",
+      customerPhone: "",
+      note: ""
+    }));
+    setStep("service");
+  }
+
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-mist px-4 py-6 sm:px-5">
-        <div className="mx-auto max-w-6xl">
-          <div className="h-72 animate-pulse rounded-lg bg-white" />
+      <main className="min-h-screen bg-mist">
+        <AppHeader displayName={customerName} role="customer" />
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-5">
+          <div className="h-80 animate-pulse rounded-md bg-white" />
         </div>
       </main>
     );
@@ -249,10 +297,11 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
 
   if (!options) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-mist px-4 sm:px-5">
-        <section className="w-full max-w-md rounded-lg border border-red-200 bg-white p-6">
-          <p className="text-sm font-semibold text-red-600">訂位頁無法使用</p>
-          <h1 className="mt-2 text-2xl font-semibold text-ink">{error ?? "找不到店家訂位資訊。"}</h1>
+      <main className="min-h-screen bg-mist">
+        <AppHeader displayName={customerName} role="customer" />
+        <section className="mx-auto max-w-xl px-4 py-16 text-center sm:px-5">
+          <p className="text-sm font-semibold text-red-600">預約頁暫時無法使用</p>
+          <h1 className="mt-2 text-2xl font-semibold text-ink">{error ?? "找不到店家預約資訊。"}</h1>
         </section>
       </main>
     );
@@ -260,329 +309,350 @@ export function BookingExperience({ tenantSlug }: { tenantSlug: string }) {
 
   return (
     <main className="min-h-screen bg-mist">
+      <AppHeader displayName={customerName} role="customer" />
+
       <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-5 lg:grid-cols-[1.2fr_0.8fr]">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-teal">{options.tenant.slug}</p>
-            <h1 className="mt-2 text-3xl font-semibold text-ink sm:text-4xl md:text-5xl">{options.tenant.name} 線上訂位</h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-              選擇分店、服務與可約時段，留下聯絡資訊後即可建立預約。這是本機測試版，方便先確認流程與欄位。
-            </p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-mist p-5">
-            <p className="text-sm font-medium text-slate-500">預約提醒</p>
-            <p className="mt-2 text-sm leading-6 text-slate-700">{options.tenant.bookingNotice}</p>
-            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <dt className="text-slate-500">目前分店</dt>
-                <dd className="mt-1 font-medium text-ink">{selectedBranch?.name ?? "未選擇"}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">服務時間</dt>
-                <dd className="mt-1 font-medium text-ink">{selectedService ? `${selectedService.durationMinutes} 分鐘` : "未選擇"}</dd>
-              </div>
-            </dl>
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-5">
+          <p className="text-sm font-semibold text-teal">{options.tenant.name}</p>
+          <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold text-ink sm:text-3xl">線上預約</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{options.tenant.bookingNotice}</p>
+            </div>
+            <p className="text-xs text-slate-500">時間依店家時區 Asia/Taipei 顯示</p>
           </div>
         </div>
       </section>
 
-      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-6 sm:px-5 xl:grid-cols-[220px_minmax(0,1fr)_340px]">
-        <nav className="grid grid-cols-4 gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:p-4 xl:block">
-          {bookingSteps.map(({ key, label }) => {
-            const state = stepState(key, step);
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-5">
+        <nav aria-label="預約進度" className="mb-6 grid grid-cols-4 border-b border-slate-200 bg-white">
+          {bookingSteps.map((item, index) => {
+            const isActive = item.key === step;
+            const isDone = index < currentStepIndex;
+            const canNavigate = index <= currentStepIndex && (item.key !== "done" || Boolean(booking));
+
             return (
               <button
-                key={key}
+                key={item.key}
+                className={`flex min-h-14 items-center justify-center gap-2 border-b-2 px-2 text-xs font-semibold sm:text-sm ${
+                  isActive
+                    ? "border-ink text-ink"
+                    : isDone
+                      ? "border-transparent text-teal"
+                      : "border-transparent text-slate-400"
+                } disabled:cursor-default`}
+                disabled={!canNavigate}
                 type="button"
-                className={`flex min-w-0 w-full flex-col items-center gap-1 rounded-md px-2 py-2 text-center text-sm font-medium sm:flex-row sm:gap-2 sm:text-left xl:mb-2 xl:gap-3 xl:px-3 ${
-                  state === "active"
-                    ? "bg-teal text-white"
-                    : state === "done"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-white text-slate-500"
-                }`}
-                onClick={() => {
-                  if (key !== "done" || booking) setStep(key as BookingStep);
-                }}
+                onClick={() => goToStep(item.key)}
               >
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/25 text-xs">{label.slice(0, 1)}</span>
-                {label}
+                <span
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                    isActive ? "bg-ink text-white" : isDone ? "bg-teal text-white" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {isDone ? <Check aria-hidden="true" className="h-3.5 w-3.5" /> : index + 1}
+                </span>
+                <span className="hidden min-[380px]:inline">{item.label}</span>
               </button>
             );
           })}
         </nav>
 
-        <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
-          {error ? <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+        {error ? <p className="mb-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
-          {step === "service" ? (
-            <div className="space-y-6">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
+          <section className="min-w-0 bg-white">
+            {step === "service" ? (
               <div>
-                <h2 className="text-2xl font-semibold text-ink">選擇分店與服務</h2>
-                <p className="mt-2 text-sm text-slate-600">後續可依據需求改成多服務、套票、訂金或指定資源。</p>
-              </div>
+                <header className="border-b border-slate-200 px-4 py-5 sm:px-6">
+                  <h2 className="text-lg font-semibold text-ink">選擇分店與服務</h2>
+                  <p className="mt-1 text-sm text-slate-500">先確認服務地點與本次預約項目。</p>
+                </header>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                {options.branches.map((branch) => (
-                  <button
-                    key={branch.id}
-                    type="button"
-                    className={`rounded-lg border p-4 text-left transition ${
-                      form.branchId === branch.id ? "border-teal bg-teal/5" : "border-slate-200 bg-white hover:border-teal"
-                    }`}
-                    onClick={() => updateForm({ branchId: branch.id })}
-                  >
-                    <span className="font-semibold text-ink">{branch.name}</span>
-                    <span className="mt-2 block text-sm leading-6 text-slate-600">{branch.address}</span>
-                    <span className="mt-1 block text-sm text-slate-500">{branch.phone}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                {options.services.map((service) => (
-                  <button
-                    key={service.id}
-                    type="button"
-                    className={`rounded-lg border p-4 text-left transition ${
-                      form.serviceId === service.id ? "border-coral bg-red-50" : "border-slate-200 bg-white hover:border-coral"
-                    }`}
-                    onClick={() => updateForm({ serviceId: service.id })}
-                  >
-                    <span className="text-xs font-semibold text-coral">{service.category}</span>
-                    <span className="mt-1 block text-lg font-semibold text-ink">{service.name}</span>
-                    <span className="mt-2 block text-sm leading-6 text-slate-600">{service.description}</span>
-                    <span className="mt-3 flex justify-between text-sm font-medium text-slate-700">
-                      <span>{service.durationMinutes} 分鐘</span>
-                      <span>{currency(service.price)}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex justify-end">
-                <button className="rounded-md bg-ink px-5 py-3 text-sm font-semibold text-white" type="button" onClick={() => setStep("time")}>
-                  下一步
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {step === "time" ? (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-semibold text-ink">選擇服務人員與時間</h2>
-                <p className="mt-2 text-sm text-slate-600">目前時段為本機測試資料，後續會接排班、休假與衝突檢查。</p>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                {options.staff.map((staff) => (
-                  <button
-                    key={staff.id}
-                    type="button"
-                    className={`rounded-lg border p-4 text-left ${
-                      form.staffId === staff.id ? "border-teal bg-teal/5" : "border-slate-200 bg-white hover:border-teal"
-                    }`}
-                    onClick={() => updateForm({ staffId: staff.id })}
-                  >
-                    <span className="font-semibold text-ink">{staff.name}</span>
-                    <span className="mt-1 block text-sm text-slate-600">{staff.title}</span>
-                  </button>
-                ))}
-              </div>
-
-              {isCalendarLoading ? <div className="h-28 animate-pulse rounded-lg bg-slate-100" /> : null}
-
-              {!isCalendarLoading ? (
-                <div className="grid gap-3 md:grid-cols-4">
-                  {calendar.map((date) => {
-                    const availableSlots = date.slots.filter((slot) => slot.status === "AVAILABLE");
-
-                    return (
+                <div className="px-4 py-5 sm:px-6">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {options.branches.map((branch) => (
                       <button
-                        key={date.date}
-                        type="button"
-                        className={`rounded-lg border px-4 py-3 text-left ${
-                          form.date === date.date ? "border-gold bg-amber-50" : "border-slate-200 bg-white hover:border-gold"
+                        key={branch.id}
+                        className={`min-h-28 rounded-md border p-4 text-left transition ${
+                          form.branchId === branch.id ? "border-teal bg-teal/5" : "border-slate-200 hover:border-teal"
                         }`}
-                        onClick={() => updateForm({ date: date.date, time: availableSlots[0]?.time ?? "" })}
+                        type="button"
+                        onClick={() => updateForm({ branchId: branch.id })}
                       >
-                        <span className="font-semibold text-ink">{date.label}</span>
-                        <span className="mt-1 block text-xs text-slate-500">{availableSlots.length} 個可預約時段</span>
+                        <span className="flex items-center gap-2 font-semibold text-ink">
+                          <Building2 aria-hidden="true" className="h-4 w-4 text-teal" />
+                          {branch.name}
+                        </span>
+                        <span className="mt-3 flex items-start gap-2 text-sm leading-6 text-slate-500">
+                          <MapPin aria-hidden="true" className="mt-1 h-3.5 w-3.5 shrink-0" />
+                          {branch.address}
+                        </span>
                       </button>
-                    );
-                  })}
+                    ))}
+                  </div>
+
+                  <div className="mt-6 grid gap-3 md:grid-cols-2">
+                    {options.services.map((service) => (
+                      <button
+                        key={service.id}
+                        className={`min-h-36 rounded-md border p-4 text-left transition ${
+                          form.serviceId === service.id ? "border-coral bg-red-50" : "border-slate-200 hover:border-coral"
+                        }`}
+                        type="button"
+                        onClick={() => updateForm({ serviceId: service.id })}
+                      >
+                        <span className="text-xs font-semibold text-coral">{service.category}</span>
+                        <span className="mt-1 block font-semibold text-ink">{service.name}</span>
+                        <span className="mt-2 block text-sm leading-6 text-slate-500">{service.description}</span>
+                        <span className="mt-3 flex items-center justify-between text-sm font-semibold text-slate-700">
+                          <span>{service.durationMinutes} 分鐘</span>
+                          <span>{currency(service.price)}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              ) : null}
 
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {(selectedDate?.slots ?? []).map((slot) => (
+                <footer className="flex justify-end border-t border-slate-200 px-4 py-4 sm:px-6">
                   <button
-                    key={`${slot.date}-${slot.time}`}
+                    className="rounded-md bg-ink px-5 py-3 text-sm font-semibold text-white"
                     type="button"
-                    className={`rounded-md border px-4 py-3 text-left text-sm font-semibold ${
-                      form.time === slot.time
-                        ? "border-ink bg-ink text-white"
-                        : slot.status === "BOOKED"
-                          ? "border-amber-200 bg-amber-50 text-amber-800"
-                          : slot.status === "CLOSED"
-                            ? "border-slate-200 bg-slate-100 text-slate-500"
-                            : "border-slate-200 bg-white text-ink hover:border-ink"
-                    } disabled:cursor-not-allowed`}
-                    disabled={slot.status !== "AVAILABLE"}
-                    onClick={() => updateForm({ time: slot.time })}
+                    onClick={() => setStep("schedule")}
                   >
-                    <span>{slot.time}</span>
-                    <span className="mt-1 block text-xs font-medium">{slotStatusLabels[slot.status]}</span>
+                    選擇日期時間
                   </button>
-                ))}
+                </footer>
               </div>
+            ) : null}
 
-              <div className="flex justify-between">
-                <button className="rounded-md border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700" type="button" onClick={() => setStep("service")}>
-                  上一步
-                </button>
-                <button
-                  className="rounded-md bg-ink px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={!form.date || !form.time || isCalendarLoading}
-                  type="button"
-                  onClick={() => setStep("customer")}
-                >
-                  下一步
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {step === "customer" ? (
-            <form
-              className="space-y-5"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submitBooking();
-              }}
-            >
+            {step === "schedule" ? (
               <div>
-                <h2 className="text-2xl font-semibold text-ink">填寫聯絡資料</h2>
-                <p className="mt-2 text-sm text-slate-600">店家會依此資訊確認預約。</p>
+                <header className="border-b border-slate-200 px-4 py-5 sm:px-6">
+                  <h2 className="text-lg font-semibold text-ink">選擇日期與時段</h2>
+                  <p className="mt-1 text-sm text-slate-500">點選月曆日期後，只顯示該日的預約時段。</p>
+                </header>
+
+                <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
+                  <p className="mb-3 text-xs font-semibold text-slate-500">服務人員</p>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    {options.staff.map((staff) => (
+                      <button
+                        key={staff.id}
+                        className={`rounded-md border px-3 py-3 text-left ${
+                          form.staffId === staff.id ? "border-teal bg-teal/5" : "border-slate-200 hover:border-teal"
+                        }`}
+                        type="button"
+                        onClick={() => updateForm({ staffId: staff.id })}
+                      >
+                        <span className="block text-sm font-semibold text-ink">{staff.name}</span>
+                        <span className="mt-1 block text-xs text-slate-500">{staff.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {isCalendarLoading ? <div className="m-5 h-80 animate-pulse rounded-md bg-slate-100" /> : null}
+
+                {!isCalendarLoading ? (
+                  <div className="grid lg:grid-cols-[minmax(0,1fr)_280px]">
+                    <div className="min-w-0 p-4 sm:p-6">
+                      <MonthCalendar
+                        audience="customer"
+                        days={monthDays}
+                        selectedDate={form.date}
+                        onSelectDate={selectDate}
+                      />
+                    </div>
+
+                    <aside className="border-t border-slate-200 p-4 sm:p-6 lg:border-l lg:border-t-0">
+                      <div className="flex items-center gap-2">
+                        <Clock3 aria-hidden="true" className="h-4 w-4 text-teal" />
+                        <h3 className="text-sm font-semibold text-ink">{selectedDate?.label ?? "請選擇日期"}</h3>
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-1">
+                        {(selectedDate?.slots ?? []).map((slot) => (
+                          <button
+                            key={`${slot.date}-${slot.time}`}
+                            className={`flex min-h-14 items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${
+                              form.time === slot.time
+                                ? "border-ink bg-ink text-white"
+                                : slot.status === "BOOKED"
+                                  ? "border-amber-200 bg-amber-50 text-amber-800"
+                                  : slot.status === "CLOSED"
+                                    ? "border-slate-200 bg-slate-100 text-slate-400"
+                                    : "border-slate-200 bg-white text-ink hover:border-teal"
+                            } disabled:cursor-not-allowed`}
+                            disabled={slot.status !== "AVAILABLE"}
+                            type="button"
+                            onClick={() => updateForm({ time: slot.time })}
+                          >
+                            <span className="font-semibold">{slot.time}</span>
+                            <span className="text-[10px] font-medium">{slotStatusLabels[slot.status]}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </aside>
+                  </div>
+                ) : null}
+
+                <footer className="flex items-center justify-between border-t border-slate-200 px-4 py-4 sm:px-6">
+                  <button
+                    className="rounded-md border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700"
+                    type="button"
+                    onClick={() => setStep("service")}
+                  >
+                    上一步
+                  </button>
+                  <button
+                    className="rounded-md bg-ink px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!form.date || !form.time}
+                    type="button"
+                    onClick={() => setStep("details")}
+                  >
+                    填寫聯絡資料
+                  </button>
+                </footer>
               </div>
+            ) : null}
 
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">姓名</span>
-                <input
-                  required
-                  className="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-ink outline-none focus:border-teal"
-                  value={form.customerName}
-                  onChange={(event) => updateForm({ customerName: event.target.value })}
-                  placeholder="例如：王小美"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">手機</span>
-                <input
-                  required
-                  className="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-ink outline-none focus:border-teal"
-                  value={form.customerPhone}
-                  onChange={(event) => updateForm({ customerPhone: event.target.value })}
-                  placeholder="例如：0912-345-678"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Email</span>
-                <input
-                  className="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-ink outline-none focus:border-teal"
-                  type="email"
-                  value={form.customerEmail}
-                  onChange={(event) => updateForm({ customerEmail: event.target.value })}
-                  placeholder="可選填"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">備註</span>
-                <textarea
-                  className="mt-2 min-h-28 w-full rounded-md border border-slate-300 px-4 py-3 text-ink outline-none focus:border-teal"
-                  value={form.note}
-                  onChange={(event) => updateForm({ note: event.target.value })}
-                  placeholder="例如：容易敏感、需要停車資訊、想先諮詢款式"
-                />
-              </label>
-
-              <div className="flex justify-between">
-                <button className="rounded-md border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700" type="button" onClick={() => setStep("time")}>
-                  上一步
-                </button>
-                <button
-                  className="rounded-md bg-coral px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
-                  type="submit"
-                  disabled={!form.date || !form.time || isSubmitting}
-                >
-                  {isSubmitting ? "送出中" : "送出預約"}
-                </button>
-              </div>
-            </form>
-          ) : null}
-
-          {step === "done" && booking ? (
-            <div className="space-y-5">
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5">
-                <p className="text-sm font-semibold text-emerald-700">預約已建立</p>
-                <h2 className="mt-2 text-2xl font-semibold text-ink">等待店家確認</h2>
-                <p className="mt-2 break-all text-sm leading-6 text-slate-700">預約編號：{booking.id}</p>
-              </div>
-              <button
-                className="rounded-md bg-ink px-5 py-3 text-sm font-semibold text-white"
-                type="button"
-                onClick={() => {
-                  const availableDay = calendar.find((day) => firstAvailableSlot(day));
-                  const availableSlot = firstAvailableSlot(availableDay);
-                  setBooking(null);
-                  setForm({
-                    ...emptyForm,
-                    branchId: options.branches[0]?.id ?? "",
-                    serviceId: options.services[0]?.id ?? "",
-                    staffId: options.staff[0]?.id ?? "staff-any",
-                    date: availableDay?.date ?? "",
-                    time: availableSlot?.time ?? ""
-                  });
-                  setStep("service");
+            {step === "details" ? (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submitBooking();
                 }}
               >
-                建立另一筆預約
-              </button>
-            </div>
-          ) : null}
-        </section>
+                <header className="border-b border-slate-200 px-4 py-5 sm:px-6">
+                  <h2 className="text-lg font-semibold text-ink">確認聯絡資料</h2>
+                  <p className="mt-1 text-sm text-slate-500">店家將使用這些資訊確認或聯繫本次預約。</p>
+                </header>
 
-        <aside className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
-          <h2 className="text-lg font-semibold text-ink">預約摘要</h2>
-          <dl className="mt-4 space-y-4 text-sm">
-            <div>
-              <dt className="text-slate-500">分店</dt>
-              <dd className="mt-1 font-medium text-ink">{selectedBranch?.name ?? "-"}</dd>
+                <div className="grid gap-5 px-4 py-5 sm:grid-cols-2 sm:px-6">
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">姓名</span>
+                    <input
+                      required
+                      className="mt-2 h-12 w-full rounded-md border border-slate-300 px-4 text-sm text-ink outline-none focus:border-teal focus:ring-2 focus:ring-teal/10"
+                      value={form.customerName}
+                      onChange={(event) => updateForm({ customerName: event.target.value })}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">手機</span>
+                    <input
+                      required
+                      className="mt-2 h-12 w-full rounded-md border border-slate-300 px-4 text-sm text-ink outline-none focus:border-teal focus:ring-2 focus:ring-teal/10"
+                      inputMode="tel"
+                      placeholder="0912-345-678"
+                      value={form.customerPhone}
+                      onChange={(event) => updateForm({ customerPhone: event.target.value })}
+                    />
+                  </label>
+                  <label className="block sm:col-span-2">
+                    <span className="text-sm font-medium text-slate-700">Email</span>
+                    <input
+                      className="mt-2 h-12 w-full rounded-md border border-slate-300 px-4 text-sm text-ink outline-none focus:border-teal focus:ring-2 focus:ring-teal/10"
+                      type="email"
+                      value={form.customerEmail}
+                      onChange={(event) => updateForm({ customerEmail: event.target.value })}
+                    />
+                  </label>
+                  <label className="block sm:col-span-2">
+                    <span className="text-sm font-medium text-slate-700">備註</span>
+                    <textarea
+                      className="mt-2 min-h-28 w-full rounded-md border border-slate-300 px-4 py-3 text-sm text-ink outline-none focus:border-teal focus:ring-2 focus:ring-teal/10"
+                      placeholder="例如：肌膚容易敏感，想先諮詢適合的療程"
+                      value={form.note}
+                      onChange={(event) => updateForm({ note: event.target.value })}
+                    />
+                  </label>
+                </div>
+
+                <footer className="flex items-center justify-between border-t border-slate-200 px-4 py-4 sm:px-6">
+                  <button
+                    className="rounded-md border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700"
+                    type="button"
+                    onClick={() => setStep("schedule")}
+                  >
+                    上一步
+                  </button>
+                  <button
+                    className="rounded-md bg-coral px-5 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-60"
+                    disabled={!form.date || !form.time || isSubmitting}
+                    type="submit"
+                  >
+                    {isSubmitting ? "送出中" : "確認預約"}
+                  </button>
+                </footer>
+              </form>
+            ) : null}
+
+            {step === "done" && booking ? (
+              <div className="px-5 py-12 text-center sm:px-8 sm:py-16">
+                <CheckCircle2 aria-hidden="true" className="mx-auto h-12 w-12 text-emerald-600" />
+                <p className="mt-5 text-sm font-semibold text-emerald-700">預約已送出</p>
+                <h2 className="mt-2 text-2xl font-semibold text-ink">等待店家確認</h2>
+                <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-600">
+                  店家已收到預約通知。預約前一小時提醒時間為{" "}
+                  {new Intl.DateTimeFormat("zh-TW", {
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                    timeZone: booking.branch.timezone
+                  }).format(new Date(booking.appointment.customerReminderAt))}
+                  。
+                </p>
+                <p className="mt-4 break-all text-xs text-slate-400">預約編號 {booking.id}</p>
+                <button
+                  className="mt-7 rounded-md bg-ink px-5 py-3 text-sm font-semibold text-white"
+                  type="button"
+                  onClick={startAnotherBooking}
+                >
+                  建立另一筆預約
+                </button>
+              </div>
+            ) : null}
+          </section>
+
+          <aside className="h-fit border border-slate-200 bg-white xl:sticky xl:top-6">
+            <header className="border-b border-slate-200 px-5 py-4">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                <Sparkles aria-hidden="true" className="h-4 w-4 text-coral" />
+                預約摘要
+              </h2>
+            </header>
+            <dl className="space-y-4 px-5 py-5 text-sm">
+              <div>
+                <dt className="text-xs text-slate-500">分店</dt>
+                <dd className="mt-1 font-medium text-ink">{selectedBranch?.name ?? "-"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">服務</dt>
+                <dd className="mt-1 font-medium text-ink">{selectedService?.name ?? "-"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">服務人員</dt>
+                <dd className="mt-1 font-medium text-ink">{selectedStaff?.name ?? "-"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">日期時間</dt>
+                <dd className="mt-1 font-medium text-ink">
+                  {selectedDate?.label ?? "-"} {form.time}
+                </dd>
+              </div>
+              <div className="border-t border-slate-200 pt-4">
+                <dt className="text-xs text-slate-500">預估費用</dt>
+                <dd className="mt-1 text-xl font-semibold text-ink">{selectedService ? currency(selectedService.price) : "-"}</dd>
+              </div>
+            </dl>
+            <div className="border-t border-slate-200 px-5 py-4 text-xs leading-5 text-slate-500">
+              預約送出後需由店家確認；如需取消或改期，請直接聯繫分店。
             </div>
-            <div>
-              <dt className="text-slate-500">服務</dt>
-              <dd className="mt-1 font-medium text-ink">{selectedService?.name ?? "-"}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">服務人員</dt>
-              <dd className="mt-1 font-medium text-ink">{selectedStaff?.name ?? "-"}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">日期時間</dt>
-              <dd className="mt-1 font-medium text-ink">
-                {selectedDate?.label ?? "-"} {form.time}
-              </dd>
-            </div>
-            <div className="border-t border-slate-200 pt-4">
-              <dt className="text-slate-500">預估費用</dt>
-              <dd className="mt-1 text-2xl font-semibold text-ink">{selectedService ? currency(selectedService.price) : "-"}</dd>
-            </div>
-          </dl>
-        </aside>
+          </aside>
+        </div>
       </div>
     </main>
   );

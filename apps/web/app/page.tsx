@@ -1,31 +1,34 @@
-import Link from "next/link";
+import Image from "next/image";
+import { redirect } from "next/navigation";
+import { LoginForm } from "../components/login-form";
+import { demoCredentials, getCurrentSession, sessionDestination } from "../lib/demo-auth";
 
-const links = [
-  { href: "/booking-center", label: "商家 / 顧客模式", detail: "Calendar booking center with shop controls and customer booking." },
-  { href: "/platform", label: "Platform", detail: "Tenants, templates, plans, audit." },
-  { href: "/app", label: "Shop Admin", detail: "Branches, staff, services, customers." },
-  { href: "/t/demo/booking", label: "Public Booking", detail: "Tenant-scoped booking entry." }
-];
+export default async function HomePage() {
+  const session = await getCurrentSession();
+  if (session) {
+    redirect(sessionDestination(session));
+  }
 
-export default function HomePage() {
   return (
-    <main className="min-h-screen bg-mist px-6 py-8">
-      <section className="mx-auto flex max-w-6xl flex-col gap-8">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-teal">Beauty SaaS Platform</p>
-          <h1 className="mt-3 max-w-3xl text-4xl font-semibold text-ink md:text-6xl">Multi-tenant beauty operations.</h1>
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-            A phase-one foundation for tenant isolation, branch scope, RBAC, appointments, customers, storage, and jobs.
-          </p>
+    <main className="grid min-h-screen bg-white lg:grid-cols-[minmax(0,1.05fr)_minmax(460px,0.95fr)]">
+      <section className="relative hidden min-h-screen overflow-hidden lg:block">
+        <Image
+          alt="明亮整潔的美容工作室接待與護理空間"
+          className="object-cover"
+          fill
+          priority
+          sizes="55vw"
+          src="/images/login-studio.png"
+        />
+        <div className="absolute inset-0 bg-black/20" />
+        <div className="absolute inset-x-0 bottom-0 bg-black/45 px-10 py-9 text-white">
+          <p className="text-sm font-semibold">Lumi Beauty Studio</p>
+          <p className="mt-2 max-w-xl text-2xl font-semibold leading-9">從預約、排班到顧客關係，讓每一天的營運更清楚。</p>
         </div>
-        <div className="grid gap-4 md:grid-cols-4">
-          {links.map((link) => (
-            <Link key={link.href} href={link.href} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal">
-              <span className="text-lg font-semibold text-ink">{link.label}</span>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{link.detail}</p>
-            </Link>
-          ))}
-        </div>
+      </section>
+
+      <section className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-10 lg:px-12">
+        <LoginForm merchantCredential={demoCredentials.merchant} customerCredential={demoCredentials.customer} />
       </section>
     </main>
   );

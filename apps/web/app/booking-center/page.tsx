@@ -1,5 +1,7 @@
-import { BookingCenter } from "./booking-center";
+import { redirect } from "next/navigation";
+import { getCurrentSession, sessionDestination } from "../../lib/demo-auth";
 
-export default function BookingCenterPage() {
-  return <BookingCenter tenantSlug="demo" />;
+export default async function LegacyBookingCenterPage() {
+  const session = await getCurrentSession();
+  redirect(session ? sessionDestination(session) : "/");
 }
