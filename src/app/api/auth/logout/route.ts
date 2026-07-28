@@ -7,6 +7,7 @@ import {
   requireRequestSession,
   revokeSession,
 } from "@/server/auth/session";
+import { createSupabaseAuthClient } from "@/server/auth/supabase";
 import { jsonError } from "@/server/http/response";
 import { getRequestId } from "@/server/security/request";
 
@@ -25,6 +26,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       outcome: "SUCCESS",
       requestId,
     });
+
+    const supabase = await createSupabaseAuthClient();
+    await supabase.auth.signOut({ scope: "local" });
 
     const response = NextResponse.json(
       { data: { success: true } },

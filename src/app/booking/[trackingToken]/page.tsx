@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { BookingManage } from "@/components/booking-manage";
+import { getCurrentSession } from "@/server/auth/session";
 import { AppError } from "@/server/http/errors";
 import { getPublicBooking } from "@/server/public-booking/booking";
 
@@ -25,5 +26,12 @@ export default async function BookingTrackingPage({
     throw error;
   }
 
-  return <BookingManage initialSummary={summary} />;
+  const session = await getCurrentSession();
+
+  return (
+    <BookingManage
+      authenticated={Boolean(session)}
+      initialSummary={summary}
+    />
+  );
 }

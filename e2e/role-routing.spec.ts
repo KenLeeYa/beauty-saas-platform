@@ -45,4 +45,18 @@ test("customer account enters the public booking calendar", async ({
   await expect(
     page.getByRole("region", { name: "月曆" }),
   ).toBeVisible();
+
+  await page.getByRole("button", { name: "登出" }).click();
+  await expect(page).toHaveURL("/");
+  await expect(
+    page.getByRole("heading", { name: "登入預約空間" }),
+  ).toBeVisible();
+
+  const cookies = await page.context().cookies();
+  expect(
+    cookies.some((cookie) => cookie.name === "beauty_session"),
+  ).toBe(false);
+  expect(
+    cookies.some((cookie) => cookie.name === "beauty_csrf"),
+  ).toBe(false);
 });

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { PublicBookingFlow } from "@/components/public-booking-flow";
+import { getCurrentSession } from "@/server/auth/session";
 import { AppError } from "@/server/http/errors";
 import { getPublicBooking } from "@/server/public-booking/booking";
 import { getPublicCatalog } from "@/server/public-booking/catalog";
@@ -82,9 +83,11 @@ export default async function PublicBookingPage({
   const initialDate =
     calendarDays.find((day) => day.availableCount > 0)?.date ?? today;
   const env = getServerEnv();
+  const session = await getCurrentSession();
 
   return (
     <PublicBookingFlow
+      authenticated={Boolean(session)}
       calendarDays={calendarDays}
       catalog={catalog}
       initialDate={initialDate}

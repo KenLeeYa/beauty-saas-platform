@@ -18,6 +18,7 @@ import {
   MonthCalendar,
   type MonthCalendarDay,
 } from "@/components/month-calendar";
+import { LogoutButton } from "@/components/logout-button";
 import { TurnstileWidget } from "@/components/turnstile-widget";
 import type { PublicAvailability } from "@/server/public-booking/availability";
 import type { PublicCatalog } from "@/server/public-booking/catalog";
@@ -52,6 +53,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 export function PublicBookingFlow({
+  authenticated,
   catalog,
   calendarDays,
   initialDate,
@@ -60,6 +62,7 @@ export function PublicBookingFlow({
   rescheduleTrackingToken,
   lockedVariantId,
 }: {
+  authenticated: boolean;
   catalog: PublicCatalog;
   calendarDays: MonthCalendarDay[];
   initialDate: string;
@@ -296,12 +299,16 @@ export function PublicBookingFlow({
               {catalog.location.name}
             </p>
           </div>
-          <Link
-            className="text-sm font-medium text-teal hover:underline"
-            href="/"
-          >
-            店家登入
-          </Link>
+          {authenticated ? (
+            <LogoutButton />
+          ) : (
+            <Link
+              className="text-sm font-medium text-teal hover:underline"
+              href="/"
+            >
+              帳號登入
+            </Link>
+          )}
         </div>
       </header>
 

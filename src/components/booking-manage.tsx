@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 
+import { LogoutButton } from "@/components/logout-button";
 import type { PublicBookingSummary } from "@/server/public-booking/booking";
 
 type ApiEnvelope<T> = {
@@ -43,8 +44,10 @@ function formatMoney(amountMinor: number, currency: string): string {
 }
 
 export function BookingManage({
+  authenticated,
   initialSummary,
 }: {
+  authenticated: boolean;
   initialSummary: PublicBookingSummary;
 }) {
   const [summary, setSummary] = useState(initialSummary);
@@ -109,12 +112,15 @@ export function BookingManage({
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4 sm:px-6">
           <p className="font-semibold text-ink">預約狀態</p>
-          <Link
-            className="text-sm font-medium text-teal hover:underline"
-            href={publicBookingPath}
-          >
-            返回預約頁
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              className="text-sm font-medium text-teal hover:underline"
+              href={publicBookingPath}
+            >
+              返回預約頁
+            </Link>
+            {authenticated ? <LogoutButton /> : null}
+          </div>
         </div>
       </header>
 
