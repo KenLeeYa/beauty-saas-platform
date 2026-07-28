@@ -1,7 +1,7 @@
 "use client";
 
 import { ShieldCheck } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 declare global {
   interface Window {
@@ -32,10 +32,37 @@ export function TurnstileWidget({
   siteKey: string;
   onToken: (token: string | null) => void;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const [shouldLoad, setShouldLoad] = useState(false);
 
   useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !("IntersectionObserver" in window)) {
+      setShouldLoad(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setShouldLoad(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "160px 0px" },
+    );
+    observer.observe(root);
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!shouldLoad) {
+      return;
+    }
+
     let disposed = false;
 
     function renderWidget(): void {
@@ -89,10 +116,10 @@ export function TurnstileWidget({
       }
       widgetIdRef.current = null;
     };
-  }, [onToken, siteKey]);
+  }, [onToken, shouldLoad, siteKey]);
 
   return (
-    <div className="min-h-16">
+    <div ref={rootRef} className="min-h-24">
       <div ref={containerRef} />
       <p className="mt-2 flex items-center gap-2 text-xs text-slate-500">
         <ShieldCheck aria-hidden="true" className="h-4 w-4 text-teal" />
