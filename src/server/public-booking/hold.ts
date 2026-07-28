@@ -28,6 +28,10 @@ export type BookingHoldResult = {
   };
 };
 
+export type BookingHoldReleaseResult = {
+  released: boolean;
+};
+
 function isAllocationConflict(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     return ["P2002", "P2004", "P2034"].includes(error.code);
@@ -235,6 +239,21 @@ export async function createBookingHold(input: {
           );
         }
 
+        const replacementTime = new Date();
+        await transaction.booking_holds.updateMany({
+          where: {
+            organization_id: input.context.organizationId,
+            location_id: input.context.locationId,
+            public_booking_session_id: input.context.sessionId,
+            status: "ACTIVE",
+          },
+          data: {
+            status: "CANCELLED",
+            cancelled_at: replacementTime,
+            updated_at: replacementTime,
+          },
+        });
+
         const variant = locationService.service_variants;
         const durationMinutes =
           locationService.duration_override_minutes ??
@@ -412,4 +431,29 @@ export async function createBookingHold(input: {
     }
     throw error;
   }
+}
+
+export async function releaseBookingHold(input: {
+  context: PublicSessionContext;
+  holdToken: string;
+}): Promise<BookingHoldReleaseResult> {
+  const releasedAt = new Date();
+  const result = await prisma.booking_holds.updateMany({
+    where: {
+      organization_id: input.context.organizationId,
+      location_id: input.context.locationId,
+      public_booking_session_id: input.context.sessionId,
+      token_hash: sha256(input.holdToken),
+      status: "ACTIVE",
+    },
+    data: {
+      status: "CANCELLED",
+      cancelled_at: releasedAt,
+      updated_at: releasedAt,
+    },
+  });
+
+  return {
+    released: result.count > 0,
+  };
 }

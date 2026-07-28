@@ -147,6 +147,19 @@ export async function getPublicAvailability(
   await prisma.$queryRaw(
     Prisma.sql`select beauty_private.expire_booking_holds()`,
   );
+  const ignoredHoldIds = (
+    await prisma.booking_holds.findMany({
+      where: {
+        organization_id: context.organizationId,
+        location_id: context.locationId,
+        public_booking_session_id: context.sessionId,
+        status: "ACTIVE",
+      },
+      select: {
+        id: true,
+      },
+    })
+  ).map(({ id }) => id);
 
   const localToday = formatDateInTimeZone(now, context.timezone);
   const dateValue = new Date(`${input.date}T00:00:00.000Z`);
@@ -314,6 +327,18 @@ export async function getPublicAvailability(
                       is_blocking: true,
                       starts_at: { lt: dayEnd },
                       ends_at: { gt: dayStart },
+                      ...(ignoredHoldIds.length > 0
+                        ? {
+                            OR: [
+                              { booking_hold_id: null },
+                              {
+                                booking_hold_id: {
+                                  notIn: ignoredHoldIds,
+                                },
+                              },
+                            ],
+                          }
+                        : {}),
                     },
                     select: {
                       starts_at: true,
@@ -365,6 +390,18 @@ export async function getPublicAvailability(
               is_blocking: true,
               starts_at: { lt: dayEnd },
               ends_at: { gt: dayStart },
+              ...(ignoredHoldIds.length > 0
+                ? {
+                    OR: [
+                      { booking_hold_id: null },
+                      {
+                        booking_hold_id: {
+                          notIn: ignoredHoldIds,
+                        },
+                      },
+                    ],
+                  }
+                : {}),
             },
             select: {
               starts_at: true,

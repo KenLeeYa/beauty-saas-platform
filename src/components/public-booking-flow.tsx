@@ -36,6 +36,10 @@ type SessionResponse = {
   expiresAt: string;
 };
 
+type ReleaseHoldResponse = {
+  released: boolean;
+};
+
 function formatMoney(amountMinor: number, currency: string): string {
   return new Intl.NumberFormat("zh-TW", {
     style: "currency",
@@ -153,7 +157,6 @@ export function PublicBookingFlow({
     }
     setIsLoading(true);
     setError(null);
-    setHold(null);
 
     try {
       const token = await ensureSession();
@@ -194,6 +197,12 @@ export function PublicBookingFlow({
     if (!sessionToken || !selectedVariant) {
       return;
     }
+    if (
+      hold?.selection.startsAt === input.startsAt &&
+      hold.selection.staffProfileId === input.staffProfileId
+    ) {
+      return;
+    }
     setIsLoading(true);
     setError(null);
 
@@ -224,6 +233,83 @@ export function PublicBookingFlow({
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function releaseCurrentHold(): Promise<boolean> {
+    const currentHold = hold;
+    if (!currentHold || !sessionToken) {
+      return true;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/public/holds", {
+        method: "DELETE",
+        headers: {
+          "content-type": "application/json",
+          "x-booking-session": sessionToken,
+        },
+        body: JSON.stringify({
+          holdToken: currentHold.holdToken,
+        }),
+      });
+      await parseResponse<ReleaseHoldResponse>(response);
+      setHold((activeHold) =>
+        activeHold?.holdToken === currentHold.holdToken
+          ? null
+          : activeHold,
+      );
+      return true;
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "無法釋放目前保留時段，請稍後再試。",
+      );
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function selectVariant(variantId: string): Promise<void> {
+    if (variantId === selectedVariantId) {
+      return;
+    }
+    if (!(await releaseCurrentHold())) {
+      return;
+    }
+
+    setSelectedVariantId(variantId);
+    setSelectedStaffId("");
+    setAvailability(null);
+  }
+
+  async function selectStaff(staffProfileId: string): Promise<void> {
+    if (staffProfileId === selectedStaffId) {
+      return;
+    }
+    if (!(await releaseCurrentHold())) {
+      return;
+    }
+
+    setSelectedStaffId(staffProfileId);
+    setAvailability(null);
+  }
+
+  async function selectDate(date: string): Promise<void> {
+    if (date === selectedDate && availability) {
+      return;
+    }
+    if (!(await releaseCurrentHold())) {
+      return;
+    }
+
+    setSelectedDate(date);
+    setAvailability(null);
+    await loadAvailability(date);
   }
 
   async function completeBooking(): Promise<void> {
@@ -349,13 +435,9 @@ export function PublicBookingFlow({
                           ? "border-teal bg-teal/5 ring-2 ring-teal/15"
                           : "border-slate-200 bg-white hover:border-teal/60"
                       }`}
+                      disabled={isLoading}
                       type="button"
-                      onClick={() => {
-                        setSelectedVariantId(variant.id);
-                        setSelectedStaffId("");
-                        setAvailability(null);
-                        setHold(null);
-                      }}
+                      onClick={() => void selectVariant(variant.id)}
                     >
                       <span className="flex items-start justify-between gap-3">
                         <span>
@@ -424,12 +506,9 @@ export function PublicBookingFlow({
                       ? "border-ink bg-ink text-white"
                       : "border-slate-300 bg-white text-slate-700"
                   }`}
+                  disabled={isLoading}
                   type="button"
-                  onClick={() => {
-                    setSelectedStaffId("");
-                    setAvailability(null);
-                    setHold(null);
-                  }}
+                  onClick={() => void selectStaff("")}
                 >
                   由系統安排
                 </button>
@@ -441,12 +520,9 @@ export function PublicBookingFlow({
                         ? "border-ink bg-ink text-white"
                         : "border-slate-300 bg-white text-slate-700"
                     }`}
+                    disabled={isLoading}
                     type="button"
-                    onClick={() => {
-                      setSelectedStaffId(staff.id);
-                      setAvailability(null);
-                      setHold(null);
-                    }}
+                    onClick={() => void selectStaff(staff.id)}
                   >
                     {staff.displayName}
                   </button>
@@ -494,12 +570,7 @@ export function PublicBookingFlow({
                   audience="customer"
                   days={calendarDays}
                   selectedDate={selectedDate}
-                  onSelectDate={(date) => {
-                    setSelectedDate(date);
-                    setAvailability(null);
-                    setHold(null);
-                    void loadAvailability(date);
-                  }}
+                  onSelectDate={(date) => void selectDate(date)}
                 />
               </div>
 
@@ -521,25 +592,34 @@ export function PublicBookingFlow({
                       {selectedDate} 可預約時段
                     </p>
                     <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                      {availability.slots.map((slot) => (
-                        <button
-                          key={slot.startsAt}
-                          className="flex h-11 items-center justify-center rounded-md border border-slate-300 bg-white text-sm font-semibold text-ink transition hover:border-teal hover:text-teal disabled:opacity-50"
-                          disabled={isLoading}
-                          type="button"
-                          onClick={() =>
-                            void reserveSlot({
-                              startsAt: slot.startsAt,
-                              staffProfileId:
-                                selectedStaffId ||
-                                slot.availableStaff[0] ||
-                                "",
-                            })
-                          }
-                        >
-                          {slot.localTime}
-                        </button>
-                      ))}
+                      {availability.slots.map((slot) => {
+                        const selected =
+                          hold?.selection.startsAt === slot.startsAt;
+                        return (
+                          <button
+                            key={slot.startsAt}
+                            aria-pressed={selected}
+                            className={`flex h-11 items-center justify-center rounded-md border text-sm font-semibold transition disabled:opacity-50 ${
+                              selected
+                                ? "border-ink bg-ink text-white"
+                                : "border-slate-300 bg-white text-ink hover:border-teal hover:text-teal"
+                            }`}
+                            disabled={isLoading}
+                            type="button"
+                            onClick={() =>
+                              void reserveSlot({
+                                startsAt: slot.startsAt,
+                                staffProfileId:
+                                  selectedStaffId ||
+                                  slot.availableStaff[0] ||
+                                  "",
+                              })
+                            }
+                          >
+                            {slot.localTime}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ) : availability ? (

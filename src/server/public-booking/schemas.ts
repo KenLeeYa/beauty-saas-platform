@@ -43,6 +43,10 @@ export const createBookingHoldSchema = z.object({
   startsAt: isoDateTimeSchema,
 }).strict();
 
+export const releaseBookingHoldSchema = z.object({
+  holdToken: tokenSchema,
+}).strict();
+
 export const confirmPublicBookingSchema = z.object({
   holdToken: tokenSchema,
   customer: z.object({
