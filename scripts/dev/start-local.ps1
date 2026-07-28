@@ -6,46 +6,43 @@ $logDir = Get-DevLogDir
 $webPort = Get-BeautyWebPort
 Set-Location $root
 
-Assert-CommandExists "pnpm"
-Assert-CommandExists "docker"
-
-Ensure-LocalEnvFile
-$pnpmCommand = Get-Command "pnpm"
-$pnpm = $pnpmCommand.Source
-if ($pnpm -like "*.ps1") {
-  $pnpm = Join-Path (Split-Path -Parent $pnpm) "pnpm.cmd"
-}
-
-Write-Host "Starting local infrastructure..."
-docker compose up -d postgres mailpit minio
+Assert-CommandExists "node"
+Assert-CommandExists "npx"
 
 $pidFile = Join-Path $logDir "pids.json"
 if (Test-Path -LiteralPath $pidFile) {
-  Write-Host "Existing pid file found. Run pnpm local:stop first if you need a clean restart."
+  $existing = Get-Content -LiteralPath $pidFile | ConvertFrom-Json
+  if ($existing.web -and (Get-Process -Id $existing.web -ErrorAction SilentlyContinue)) {
+    Write-Host "Beauty web is already running."
+    & "$PSScriptRoot\status-local.ps1"
+    exit 0
+  }
+  Remove-Item -LiteralPath $pidFile -Force
 }
 
-Stop-LocalPortOwners -Ports @($webPort, 4000)
-
-$nextCache = Join-Path $root "apps\web\.next"
-if (Test-Path -LiteralPath $nextCache) {
-  Write-Host "Removing stale Next.js cache..."
-  Remove-Item -LiteralPath $nextCache -Recurse -Force
+$npx = Get-CommandExecutable "npx"
+$previousErrorAction = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+& $npx supabase status *> $null
+$statusExitCode = $LASTEXITCODE
+$ErrorActionPreference = $previousErrorAction
+if ($statusExitCode -ne 0) {
+  Write-Host "Starting local Supabase..."
+  & $npx supabase start
+  if ($LASTEXITCODE -ne 0) {
+    throw "Local Supabase failed to start."
+  }
 }
 
-Write-Host "Starting API on http://127.0.0.1:4000 ..."
-$apiProcess = Start-Process `
-  -FilePath $pnpm `
-  -ArgumentList @("--filter", "@beauty-saas/api", "dev") `
-  -WorkingDirectory $root `
-  -RedirectStandardOutput (Join-Path $logDir "api.log") `
-  -RedirectStandardError (Join-Path $logDir "api.err.log") `
-  -WindowStyle Hidden `
-  -PassThru
+Sync-LocalEnvFile
+Assert-PortAvailable $webPort
 
 Write-Host "Starting web on all network interfaces (port $webPort) ..."
+$node = Get-CommandExecutable "node"
+$nextCli = Join-Path $root "node_modules\next\dist\bin\next"
 $webProcess = Start-Process `
-  -FilePath $pnpm `
-  -ArgumentList @("--filter", "@beauty-saas/web", "exec", "next", "dev", "--hostname", "0.0.0.0", "--port", "$webPort") `
+  -FilePath $node `
+  -ArgumentList @($nextCli, "dev", "--hostname", "0.0.0.0", "--port", "$webPort") `
   -WorkingDirectory $root `
   -RedirectStandardOutput (Join-Path $logDir "web.log") `
   -RedirectStandardError (Join-Path $logDir "web.err.log") `
@@ -53,25 +50,33 @@ $webProcess = Start-Process `
   -PassThru
 
 @{
-  api = $apiProcess.Id
   web = $webProcess.Id
   webPort = $webPort
   startedAt = (Get-Date).ToString("o")
 } | ConvertTo-Json | Set-Content -LiteralPath $pidFile -Encoding UTF8
 
-Start-Sleep -Seconds 8
+$healthUrl = "http://127.0.0.1:$webPort/api/health"
+$deadline = (Get-Date).AddSeconds(90)
+do {
+  Start-Sleep -Seconds 2
+  $healthStatus = Test-HttpEndpoint $healthUrl
+} until ($healthStatus -eq 200 -or (Get-Date) -gt $deadline)
+
+if ($healthStatus -ne 200) {
+  throw "Beauty web did not become healthy. Check $logDir."
+}
 
 $localAddress = Get-LocalIPv4Address
 
 Write-Host ""
-Write-Host "Local app servers started."
-Write-Host "Web: http://127.0.0.1:$webPort"
-Write-Host "Booking center: http://127.0.0.1:$webPort/booking-center"
+Write-Host "Beauty local environment started."
+Write-Host "Login: http://127.0.0.1:$webPort/"
+Write-Host "Customer booking: http://127.0.0.1:$webPort/book/demo/taipei"
+Write-Host "Merchant workspace: http://127.0.0.1:$webPort/merchant"
 if ($localAddress) {
-  Write-Host "Phone / LAN: http://$($localAddress):$webPort/booking-center"
+  Write-Host "Phone / LAN: http://$($localAddress):$webPort/"
 }
-Write-Host "API health: http://127.0.0.1:4000/api/v1/health/live"
-Write-Host "Mailpit: http://127.0.0.1:8025"
-Write-Host "MinIO console: http://127.0.0.1:9001"
+Write-Host "API health: $healthUrl"
+Write-Host "Supabase Studio: http://127.0.0.1:55323"
 Write-Host ""
-pnpm local:status
+& "$PSScriptRoot\status-local.ps1"

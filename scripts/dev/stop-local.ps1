@@ -9,21 +9,19 @@ Set-Location $root
 
 if (Test-Path -LiteralPath $pidFile) {
   $pids = Get-Content -LiteralPath $pidFile | ConvertFrom-Json
-  foreach ($processId in @($pids.api, $pids.web)) {
-    if ($processId) {
-      $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
-      if ($process) {
-        Stop-Process -Id $processId -Force
-        Write-Host "Stopped process $processId"
-      }
+  if ($pids.web) {
+    $process = Get-Process -Id $pids.web -ErrorAction SilentlyContinue
+    if ($process -and $process.ProcessName -eq "node") {
+      Stop-Process -Id $pids.web -Force
+      Write-Host "Stopped Beauty web process $($pids.web)"
     }
   }
   Remove-Item -LiteralPath $pidFile -Force
 }
 
-Stop-LocalPortOwners -Ports @($webPort, 4000)
-
-Write-Host "Stopping local infrastructure..."
-docker compose stop postgres mailpit minio
+Assert-CommandExists "npx"
+$npx = Get-CommandExecutable "npx"
+Write-Host "Stopping local Supabase..."
+& $npx supabase stop
 
 Write-Host "Local test environment stopped."

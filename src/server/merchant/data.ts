@@ -1,0 +1,711 @@
+import "server-only";
+
+import {
+  capabilitiesForRoles,
+  hasCapability,
+} from "../authorization/capabilities";
+import type { OrganizationContext } from "../authorization/context";
+import { prisma } from "../database/prisma";
+import { requireLocation } from "../authorization/context";
+import {
+  addLocalDays,
+  formatDateInTimeZone,
+  zonedDateTimeToUtc,
+} from "../time/timezone";
+
+export type MerchantWorkspaceData = {
+  session: {
+    displayName: string;
+    email: string;
+  };
+  organization: {
+    id: string;
+    name: string;
+    slug: string;
+    status: string;
+  };
+  location: {
+    id: string;
+    name: string;
+    slug: string;
+    timezone: string;
+    bookingState: string;
+    onlineBookingEnabled: boolean;
+  };
+  capabilities: string[];
+  stats: {
+    todayBookings: number;
+    pendingBookings: number;
+    confirmedBookings: number;
+    monthRevenueMinor: number;
+    currency: string;
+  };
+  calendarDays: Array<{
+    date: string;
+    availableCount: number;
+    bookedCount: number;
+    closedCount: number;
+  }>;
+  bookings: Array<{
+    id: string;
+    status: string;
+    paymentStatus: string;
+    version: number;
+    totalMinor: number;
+    depositRequiredMinor: number;
+    paidMinor: number;
+    currency: string;
+    customerName: string;
+    customerPhone: string | null;
+    serviceName: string;
+    variantName: string;
+    staffName: string | null;
+    startsAt: string;
+    endsAt: string;
+    source: string;
+  }>;
+  services: Array<{
+    id: string;
+    locationServiceId: string;
+    name: string;
+    variantName: string;
+    durationMinutes: number;
+    priceMinor: number;
+    onlineBookingEnabled: boolean;
+    staffCount: number;
+  }>;
+  staff: Array<{
+    id: string;
+    displayName: string;
+    title: string;
+    skills: string[];
+    isActive: boolean;
+  }>;
+  resources: Array<{
+    id: string;
+    name: string;
+    typeName: string;
+    kind: string;
+    isActive: boolean;
+  }>;
+  customers: Array<{
+    id: string;
+    displayName: string;
+    phone: string | null;
+    lastServiceAt: string | null;
+    completedCount: number;
+    totalSpendMinor: string;
+  }>;
+  locations: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    code: string;
+    bookingState: string;
+    onlineBookingEnabled: boolean;
+  }>;
+  subscription: {
+    status: string;
+    planName: string;
+    periodEnd: string | null;
+  } | null;
+  setup: {
+    lastStep: string;
+    goLiveAt: string | null;
+    completedSteps: number;
+    totalSteps: number;
+  } | null;
+  notificationIntegrations: Array<{
+    channel: string;
+    status: string;
+    lastVerifiedAt: string | null;
+    lastErrorCode: string | null;
+  }>;
+  notificationDeliveries: Array<{
+    id: string;
+    channel: string;
+    eventType: string;
+    status: string;
+    errorCode: string | null;
+    createdAt: string;
+  }>;
+};
+
+export async function getMerchantWorkspaceData(
+  context: OrganizationContext,
+): Promise<MerchantWorkspaceData> {
+  const location = requireLocation(context);
+  const now = new Date();
+  const localToday = formatDateInTimeZone(now, location.timezone);
+  const rangeStartDate = addLocalDays(localToday, -35);
+  const rangeEndDate = addLocalDays(localToday, 95);
+  const rangeStart = zonedDateTimeToUtc(
+    rangeStartDate,
+    "00:00",
+    location.timezone,
+  );
+  const rangeEnd = zonedDateTimeToUtc(
+    rangeEndDate,
+    "00:00",
+    location.timezone,
+  );
+  const currentMonthStart = `${localToday.slice(0, 7)}-01`;
+  const nextMonthStart = addLocalDays(
+    currentMonthStart,
+    new Date(
+      Date.UTC(
+        Number(currentMonthStart.slice(0, 4)),
+        Number(currentMonthStart.slice(5, 7)),
+        0,
+      ),
+    ).getUTCDate(),
+  );
+  const monthStartUtc = zonedDateTimeToUtc(
+    currentMonthStart,
+    "00:00",
+    location.timezone,
+  );
+  const nextMonthStartUtc = zonedDateTimeToUtc(
+    nextMonthStart,
+    "00:00",
+    location.timezone,
+  );
+  const canReadBookings =
+    hasCapability(context.roles, "booking.read") ||
+    hasCapability(context.roles, "booking.own.read");
+  const canReadCustomers = hasCapability(
+    context.roles,
+    "customer.read",
+  );
+  const canReadSensitiveCustomers = hasCapability(
+    context.roles,
+    "customer.sensitive.read",
+  );
+  const canReadNotificationStatus =
+    hasCapability(context.roles, "organization.manage") ||
+    hasCapability(context.roles, "booking.manage");
+
+  const [
+    locationRecord,
+    bookingRecords,
+    serviceRecords,
+    staffRecords,
+    resourceRecords,
+    customerRecords,
+    locationRecords,
+    organizationRecord,
+    notificationIntegrationRecords,
+    notificationDeliveryRecords,
+  ] = await Promise.all([
+    prisma.locations.findUniqueOrThrow({
+      where: { id: location.id },
+      select: {
+        booking_state: true,
+        online_booking_enabled: true,
+        currency: true,
+        location_business_hours: {
+          select: {
+            day_of_week: true,
+            is_closed: true,
+          },
+        },
+      },
+    }),
+    canReadBookings
+      ? prisma.bookings.findMany({
+          where: {
+            organization_id: context.organization.id,
+            location_id: location.id,
+            booking_segments: {
+              some: {
+                starts_at: {
+                  gte: rangeStart,
+                  lt: rangeEnd,
+                },
+                ...(hasCapability(context.roles, "booking.own.read") &&
+                !hasCapability(context.roles, "booking.read") &&
+                context.linkedStaffProfileId
+                  ? {
+                      assigned_staff_id:
+                        context.linkedStaffProfileId,
+                    }
+                  : {}),
+              },
+            },
+          },
+          orderBy: {
+            created_at: "desc",
+          },
+          take: 500,
+          select: {
+            id: true,
+            status: true,
+            payment_status: true,
+            version: true,
+            total_minor: true,
+            deposit_required_minor: true,
+            paid_minor: true,
+            currency: true,
+            source: true,
+            customers: {
+              select: {
+                display_name: true,
+                customer_contacts: {
+                  where: {
+                    contact_type: "PHONE",
+                    is_primary: true,
+                  },
+                  take: 1,
+                  select: {
+                    value: true,
+                  },
+                },
+              },
+            },
+            booking_segments: {
+              orderBy: {
+                sort_order: "asc",
+              },
+              take: 1,
+              select: {
+                service_name_snapshot: true,
+                variant_name_snapshot: true,
+                staff_name_snapshot: true,
+                starts_at: true,
+                ends_at: true,
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+    hasCapability(context.roles, "catalog.read")
+      ? prisma.location_services.findMany({
+          where: {
+            organization_id: context.organization.id,
+            location_id: location.id,
+            is_active: true,
+          },
+          orderBy: {
+            sort_order: "asc",
+          },
+          select: {
+            id: true,
+            online_booking_enabled: true,
+            price_override_minor: true,
+            duration_override_minutes: true,
+            services: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            service_variants: {
+              select: {
+                name: true,
+                duration_minutes: true,
+                price_minor: true,
+              },
+            },
+            service_staff_assignments: {
+              where: {
+                is_active: true,
+              },
+              select: {
+                id: true,
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+    hasCapability(context.roles, "staff.read")
+      ? prisma.staff_profiles.findMany({
+          where: {
+            organization_id: context.organization.id,
+            staff_location_assignments: {
+              some: {
+                location_id: location.id,
+                is_active: true,
+              },
+            },
+          },
+          orderBy: {
+            sort_order: "asc",
+          },
+          select: {
+            id: true,
+            display_name: true,
+            title: true,
+            skills: true,
+            is_active: true,
+          },
+        })
+      : Promise.resolve([]),
+    hasCapability(context.roles, "resource.read")
+      ? prisma.resources.findMany({
+          where: {
+            organization_id: context.organization.id,
+            location_id: location.id,
+          },
+          orderBy: {
+            sort_order: "asc",
+          },
+          select: {
+            id: true,
+            name: true,
+            is_active: true,
+            resource_types: {
+              select: {
+                name: true,
+                kind: true,
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+    canReadCustomers
+      ? prisma.customers.findMany({
+          where: {
+            organization_id: context.organization.id,
+            is_active: true,
+          },
+          orderBy: {
+            created_at: "desc",
+          },
+          take: 100,
+          select: {
+            id: true,
+            display_name: true,
+            customer_contacts: {
+              where: {
+                contact_type: "PHONE",
+                is_primary: true,
+              },
+              take: 1,
+              select: {
+                value: true,
+              },
+            },
+            customer_metrics: {
+              select: {
+                last_service_at: true,
+                completed_count: true,
+                total_spend_minor: true,
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+    prisma.locations.findMany({
+      where: {
+        organization_id: context.organization.id,
+        id: {
+          in: [...context.accessibleLocationIds],
+        },
+        is_active: true,
+      },
+      orderBy: {
+        created_at: "asc",
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        code: true,
+        booking_state: true,
+        online_booking_enabled: true,
+      },
+    }),
+    prisma.organizations.findUniqueOrThrow({
+      where: {
+        id: context.organization.id,
+      },
+      select: {
+        subscriptions: {
+          where: {
+            is_current: true,
+          },
+          take: 1,
+          select: {
+            status: true,
+            billing_period_end: true,
+            plan_versions: {
+              select: {
+                plans: {
+                  select: {
+                    display_name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        merchant_setup_progress: {
+          select: {
+            last_step: true,
+            go_live_at: true,
+            brand_completed_at: true,
+            location_completed_at: true,
+            business_hours_completed_at: true,
+            service_completed_at: true,
+            staff_completed_at: true,
+            resource_completed_at: true,
+            policies_completed_at: true,
+            notifications_completed_at: true,
+          },
+        },
+      },
+    }),
+    canReadNotificationStatus
+      ? prisma.notification_integrations.findMany({
+          where: {
+            organization_id: context.organization.id,
+          },
+          orderBy: {
+            channel: "asc",
+          },
+          select: {
+            channel: true,
+            status: true,
+            last_verified_at: true,
+            last_error_code: true,
+          },
+        })
+      : Promise.resolve([]),
+    canReadNotificationStatus
+      ? prisma.notification_deliveries.findMany({
+          where: {
+            organization_id: context.organization.id,
+            notification_jobs: {
+              notification_outbox: {
+                location_id: location.id,
+              },
+            },
+          },
+          orderBy: {
+            created_at: "desc",
+          },
+          take: 20,
+          select: {
+            id: true,
+            channel: true,
+            status: true,
+            error_code: true,
+            created_at: true,
+            notification_jobs: {
+              select: {
+                notification_outbox: {
+                  select: {
+                    event_type: true,
+                  },
+                },
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const bookings = bookingRecords.flatMap((booking) => {
+    const segment = booking.booking_segments[0];
+    if (!segment) {
+      return [];
+    }
+    return [
+      {
+        id: booking.id,
+        status: booking.status,
+        paymentStatus: booking.payment_status,
+        version: booking.version,
+        totalMinor: booking.total_minor,
+        depositRequiredMinor: booking.deposit_required_minor,
+        paidMinor: booking.paid_minor,
+        currency: booking.currency,
+        customerName: booking.customers.display_name,
+        customerPhone:
+          canReadSensitiveCustomers
+            ? booking.customers.customer_contacts[0]?.value ?? null
+            : null,
+        serviceName: segment.service_name_snapshot,
+        variantName: segment.variant_name_snapshot,
+        staffName: segment.staff_name_snapshot,
+        startsAt: segment.starts_at.toISOString(),
+        endsAt: segment.ends_at.toISOString(),
+        source: booking.source,
+      },
+    ];
+  });
+  const bookingCountsByDate = new Map<string, number>();
+  for (const booking of bookings) {
+    const date = formatDateInTimeZone(
+      new Date(booking.startsAt),
+      location.timezone,
+    );
+    bookingCountsByDate.set(
+      date,
+      (bookingCountsByDate.get(date) ?? 0) + 1,
+    );
+  }
+  const openDayOfWeek = new Set(
+    locationRecord.location_business_hours
+      .filter((hours) => !hours.is_closed)
+      .map((hours) => hours.day_of_week),
+  );
+  const calendarDays = Array.from({ length: 130 }, (_, index) => {
+    const date = addLocalDays(rangeStartDate, index);
+    const dayOfWeek = new Date(`${date}T12:00:00.000Z`).getUTCDay();
+    const open = openDayOfWeek.has(dayOfWeek);
+    return {
+      date,
+      availableCount: open ? 1 : 0,
+      bookedCount: bookingCountsByDate.get(date) ?? 0,
+      closedCount: open ? 0 : 1,
+    };
+  });
+  const localMonthBookings = bookings.filter((booking) => {
+    const startsAt = new Date(booking.startsAt);
+    return startsAt >= monthStartUtc && startsAt < nextMonthStartUtc;
+  });
+  const subscription = organizationRecord.subscriptions[0];
+  const setup = organizationRecord.merchant_setup_progress;
+  const completedSteps = setup
+    ? [
+        setup.brand_completed_at,
+        setup.location_completed_at,
+        setup.business_hours_completed_at,
+        setup.service_completed_at,
+        setup.staff_completed_at,
+        setup.resource_completed_at,
+        setup.policies_completed_at,
+        setup.notifications_completed_at,
+      ].filter(Boolean).length
+    : 0;
+
+  return {
+    session: {
+      displayName: context.session.displayName,
+      email: context.session.email,
+    },
+    organization: context.organization,
+    location: {
+      id: location.id,
+      name: location.name,
+      slug: location.slug,
+      timezone: location.timezone,
+      bookingState: locationRecord.booking_state,
+      onlineBookingEnabled:
+        locationRecord.online_booking_enabled,
+    },
+    capabilities: [
+      ...capabilitiesForRoles(context.roles),
+    ],
+    stats: {
+      todayBookings: bookings.filter(
+        (booking) =>
+          formatDateInTimeZone(
+            new Date(booking.startsAt),
+            location.timezone,
+          ) === localToday,
+      ).length,
+      pendingBookings: bookings.filter(
+        (booking) => booking.status === "PENDING_PAYMENT",
+      ).length,
+      confirmedBookings: bookings.filter((booking) =>
+        ["CONFIRMED", "CHECKED_IN", "IN_SERVICE"].includes(
+          booking.status,
+        ),
+      ).length,
+      monthRevenueMinor: localMonthBookings
+        .filter((booking) => booking.status === "COMPLETED")
+        .reduce((sum, booking) => sum + booking.totalMinor, 0),
+      currency: locationRecord.currency,
+    },
+    calendarDays,
+    bookings,
+    services: serviceRecords.map((service) => ({
+      id: service.services.id,
+      locationServiceId: service.id,
+      name: service.services.name,
+      variantName: service.service_variants.name,
+      durationMinutes:
+        service.duration_override_minutes ??
+        service.service_variants.duration_minutes,
+      priceMinor:
+        service.price_override_minor ??
+        service.service_variants.price_minor,
+      onlineBookingEnabled: service.online_booking_enabled,
+      staffCount: service.service_staff_assignments.length,
+    })),
+    staff: staffRecords.map((staff) => ({
+      id: staff.id,
+      displayName: staff.display_name,
+      title: staff.title,
+      skills: staff.skills,
+      isActive: staff.is_active,
+    })),
+    resources: resourceRecords.map((resource) => ({
+      id: resource.id,
+      name: resource.name,
+      typeName: resource.resource_types.name,
+      kind: resource.resource_types.kind,
+      isActive: resource.is_active,
+    })),
+    customers: customerRecords.map((customer) => ({
+      id: customer.id,
+      displayName: customer.display_name,
+      phone: customer.customer_contacts[0]?.value ?? null,
+      lastServiceAt:
+        customer.customer_metrics?.last_service_at?.toISOString() ??
+        null,
+      completedCount:
+        customer.customer_metrics?.completed_count ?? 0,
+      totalSpendMinor:
+        customer.customer_metrics?.total_spend_minor.toString() ??
+        "0",
+    })),
+    locations: locationRecords.map((item) => ({
+      id: item.id,
+      name: item.name,
+      slug: item.slug,
+      code: item.code,
+      bookingState: item.booking_state,
+      onlineBookingEnabled: item.online_booking_enabled,
+    })),
+    subscription: subscription
+      ? {
+          status: subscription.status,
+          planName:
+            subscription.plan_versions.plans.display_name,
+          periodEnd:
+            subscription.billing_period_end?.toISOString() ?? null,
+        }
+      : null,
+    setup: setup
+      ? {
+          lastStep: setup.last_step ?? "BRAND",
+          goLiveAt: setup.go_live_at?.toISOString() ?? null,
+          completedSteps,
+          totalSteps: 8,
+        }
+      : null,
+    notificationIntegrations: notificationIntegrationRecords.map(
+      (integration) => ({
+        channel: integration.channel,
+        status: integration.status,
+        lastVerifiedAt:
+          integration.last_verified_at?.toISOString() ?? null,
+        lastErrorCode: integration.last_error_code,
+      }),
+    ),
+    notificationDeliveries: notificationDeliveryRecords.map(
+      (delivery) => ({
+        id: delivery.id,
+        channel: delivery.channel,
+        eventType:
+          delivery.notification_jobs.notification_outbox.event_type,
+        status: delivery.status,
+        errorCode: delivery.error_code,
+        createdAt: delivery.created_at.toISOString(),
+      }),
+    ),
+  };
+}

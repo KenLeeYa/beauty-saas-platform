@@ -3,28 +3,24 @@ name: Database Migration Check
 on:
   pull_request:
     paths:
-      - "infrastructure/migrations/**"
-      - "packages/database/**"
+      - "supabase/**"
+      - "prisma/**"
+      - "package.json"
+      - "package-lock.json"
 
 jobs:
   migration-check:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: beauty_saas
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d beauty_saas"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v4
-      - run: psql "$DATABASE_URL" -f infrastructure/migrations/0001_multi_tenant_foundation.sql
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/beauty_saas
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run db:start
+      - run: npm run db:reset
+      - run: npm run db:test
+      - run: npm run db:lint
+      - if: always()
+        run: npm run db:stop
