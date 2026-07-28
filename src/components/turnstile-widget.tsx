@@ -32,30 +32,36 @@ export function TurnstileWidget({
   siteKey: string;
   onToken: (token: string | null) => void;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const [shouldLoad, setShouldLoad] = useState(false);
 
   useEffect(() => {
-    const root = rootRef.current;
-    if (!root || !("IntersectionObserver" in window)) {
-      setShouldLoad(true);
-      return;
+    const interactionEvents = [
+      "pointermove",
+      "pointerdown",
+      "keydown",
+      "scroll",
+    ] as const;
+
+    function stopListening(): void {
+      for (const eventName of interactionEvents) {
+        window.removeEventListener(eventName, startLoading);
+      }
     }
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          setShouldLoad(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "160px 0px" },
-    );
-    observer.observe(root);
+    function startLoading(): void {
+      setShouldLoad(true);
+      stopListening();
+    }
 
-    return () => observer.disconnect();
+    for (const eventName of interactionEvents) {
+      window.addEventListener(eventName, startLoading, {
+        passive: true,
+      });
+    }
+
+    return stopListening;
   }, []);
 
   useEffect(() => {
@@ -119,7 +125,7 @@ export function TurnstileWidget({
   }, [onToken, shouldLoad, siteKey]);
 
   return (
-    <div ref={rootRef} className="min-h-24">
+    <div className="min-h-24">
       <div ref={containerRef} />
       <p className="mt-2 flex items-center gap-2 text-xs text-slate-500">
         <ShieldCheck aria-hidden="true" className="h-4 w-4 text-teal" />
