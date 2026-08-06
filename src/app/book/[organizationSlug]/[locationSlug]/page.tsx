@@ -67,6 +67,15 @@ export default async function PublicBookingPage({
       hoursByDay.set(hours.dayOfWeek, true);
     }
   }
+  const schedulesByDate = new Map<
+    string,
+    (typeof catalog.daySchedules)[number][]
+  >();
+  for (const schedule of catalog.daySchedules ?? []) {
+    const schedules = schedulesByDate.get(schedule.date) ?? [];
+    schedules.push(schedule);
+    schedulesByDate.set(schedule.date, schedules);
+  }
   const calendarDays = Array.from(
     { length: catalog.location.maximumAdvanceDays + 1 },
     (_, index) => {
@@ -74,7 +83,10 @@ export default async function PublicBookingPage({
       const dayOfWeek = new Date(
         `${date}T12:00:00.000Z`,
       ).getUTCDay();
-      const isOpen = hoursByDay.get(dayOfWeek) ?? false;
+      const daySchedules = schedulesByDate.get(date);
+      const isOpen = daySchedules
+        ? daySchedules.some((schedule) => !schedule.isClosed)
+        : (hoursByDay.get(dayOfWeek) ?? false);
       return {
         date,
         availableCount: isOpen ? 1 : 0,

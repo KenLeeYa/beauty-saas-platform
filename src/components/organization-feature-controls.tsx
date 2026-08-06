@@ -20,6 +20,7 @@ const featureLabels: Readonly<Record<string, string>> = {
   BASIC_CALENDAR: "基本行事曆",
   STAFF_SCHEDULING: "人員排班",
   CUSTOMER_CRM: "顧客管理",
+  CUSTOMER_BLACKLIST: "顧客黑名單（加值）",
   CUSTOMER_MEDIA: "顧客私密媒體",
   BUSINESS_HOURS: "營業時間",
   RESOURCE_MANAGEMENT: "空間與設備",

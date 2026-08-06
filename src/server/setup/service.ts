@@ -192,6 +192,7 @@ async function configurePolicies(input: {
           minimum_lead_minutes: input.payload.minimumLeadMinutes,
           maximum_advance_days: input.payload.maximumAdvanceDays,
           hold_minutes: input.payload.holdMinutes,
+          deposits_enabled: input.payload.depositMode !== "NONE",
           cancellation_cutoff_hours:
             input.payload.cancellationCutoffHours,
           reminder_hours: [24, 3, 1],
@@ -201,6 +202,7 @@ async function configurePolicies(input: {
           minimum_lead_minutes: input.payload.minimumLeadMinutes,
           maximum_advance_days: input.payload.maximumAdvanceDays,
           hold_minutes: input.payload.holdMinutes,
+          deposits_enabled: input.payload.depositMode !== "NONE",
           cancellation_cutoff_hours:
             input.payload.cancellationCutoffHours,
           reminder_hours: [24, 3, 1],

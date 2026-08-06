@@ -593,6 +593,10 @@ model customers {
   source                                                                                    customer_source            @default(OTHER)
   preferred_staff_id                                                                        String?                    @db.Uuid
   general_preferences                                                                       String?
+  deposit_mode                                                                              customer_deposit_mode      @default(DEFAULT)
+  is_blacklisted                                                                            Boolean                    @default(false)
+  blacklist_reason                                                                          String?
+  blacklisted_at                                                                            DateTime?                  @db.Timestamptz(6)
   is_active                                                                                 Boolean                    @default(true)
   anonymized_at                                                                             DateTime?                  @db.Timestamptz(6)
   created_at                                                                                DateTime                   @default(now()) @db.Timestamptz(6)
@@ -807,6 +811,7 @@ model location_booking_policies {
   customer_reschedule_enabled   Boolean   @default(true)
   cancellation_cutoff_hours     Int       @default(24)
   reminder_hours                Int[]     @default([24, 3])
+  deposits_enabled              Boolean   @default(false)
   created_at                    DateTime  @default(now()) @db.Timestamptz(6)
   updated_at                    DateTime  @default(now()) @db.Timestamptz(6)
   locations                     locations @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "location_booking_policies_location_fk")
@@ -831,6 +836,27 @@ model location_business_hours {
 
   @@unique([location_id, day_of_week, segment_index], map: "location_business_hours_unique")
   @@index([organization_id, location_id, day_of_week], map: "location_business_hours_scope_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model location_day_schedules {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String        @db.Uuid
+  location_id     String        @db.Uuid
+  schedule_date   DateTime      @db.Date
+  segment_index   Int           @default(0) @db.SmallInt
+  opens_at        DateTime?     @db.Time(6)
+  closes_at       DateTime?     @db.Time(6)
+  is_closed       Boolean       @default(false)
+  reason          String        @default("")
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime      @default(now()) @db.Timestamptz(6)
+  locations       locations     @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "location_day_schedules_location_fk")
+  organizations   organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([location_id, schedule_date, segment_index], map: "location_day_schedules_unique")
+  @@index([organization_id, location_id, schedule_date], map: "location_day_schedules_scope_idx")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -920,6 +946,7 @@ model locations {
   deposit_policies             deposit_policies[]
   location_booking_policies    location_booking_policies?
   location_business_hours      location_business_hours[]
+  location_day_schedules       location_day_schedules[]
   location_memberships         location_memberships[]
   location_services            location_services[]
   organizations                organizations                  @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -1265,6 +1292,10 @@ model organizations {
   name                           String
   slug                           String                           @unique
   business_name                  String
+  entity_type                    organization_entity_type         @default(SOLE_PROPRIETOR)
+  brand_description              String                           @default("")
+  brand_logo_path                String?
+  brand_cover_image_path         String?
   email                          String
   phone                          String
   status                         organization_status              @default(TRIALING)
@@ -1286,6 +1317,7 @@ model organizations {
   line_link_sessions             line_link_sessions[]
   line_webhook_events            line_webhook_events[]
   locations                      locations[]
+  location_day_schedules         location_day_schedules[]
   merchant_applications          merchant_applications[]
   merchant_setup_progress        merchant_setup_progress?
   notification_integrations      notification_integrations[]
@@ -2000,6 +2032,12 @@ enum customer_contact_type {
   LINE
 }
 
+enum customer_deposit_mode {
+  DEFAULT
+  REQUIRED
+  EXEMPT
+}
+
 enum customer_note_sensitivity {
   STANDARD
   SENSITIVE
@@ -2029,6 +2067,7 @@ enum feature_key {
   BASIC_CALENDAR
   STAFF_SCHEDULING
   CUSTOMER_CRM
+  CUSTOMER_BLACKLIST
   CUSTOMER_MEDIA
   BUSINESS_HOURS
   RESOURCE_MANAGEMENT
@@ -2049,6 +2088,11 @@ enum feature_key {
   MEMBERSHIPS_PACKAGES
   AI_ASSISTANT
   MARKETPLACE
+}
+
+enum organization_entity_type {
+  SOLE_PROPRIETOR
+  COMPANY
 }
 
 enum feature_override_type {

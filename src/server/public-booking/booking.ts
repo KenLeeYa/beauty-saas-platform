@@ -465,6 +465,8 @@ export async function confirmPublicBooking(input: {
               },
               select: {
                 id: true,
+                deposit_mode: true,
+                is_blacklisted: true,
               },
             })
           : await transaction.customers.create({
@@ -497,8 +499,18 @@ export async function confirmPublicBooking(input: {
               },
               select: {
                 id: true,
+                deposit_mode: true,
+                is_blacklisted: true,
               },
             });
+
+        if (customer.is_blacklisted) {
+          throw new AppError(
+            "FORBIDDEN",
+            "此聯絡方式目前無法使用線上預約，請直接聯絡店家。",
+            403,
+          );
+        }
 
         if (existingCustomerId) {
           const existingPhone = contactMatches.some(
@@ -563,6 +575,15 @@ export async function confirmPublicBooking(input: {
               payment_window_minutes: true,
             },
           });
+        const bookingPolicy =
+          await transaction.location_booking_policies.findUnique({
+            where: {
+              location_id: input.context.locationId,
+            },
+            select: {
+              deposits_enabled: true,
+            },
+          });
         const cancellationPolicy =
           await transaction.cancellation_policies.findFirst({
             where: {
@@ -594,18 +615,37 @@ export async function confirmPublicBooking(input: {
         const totalMinor =
           locationService.price_override_minor ??
           hold.service_variants.price_minor;
-        const deposit = resolveDepositPolicy({
-          totalMinor,
-          locationOverrideFixed:
-            locationService.deposit_fixed_override_minor,
-          locationOverridePercentage:
-            locationService.deposit_percentage_override,
-          variantFixed:
-            hold.service_variants.deposit_fixed_minor,
-          variantPercentage:
-            hold.service_variants.deposit_percentage,
-          policy: depositPolicy,
-        });
+        const depositsEnabled =
+          customer.deposit_mode === "REQUIRED" ||
+          (customer.deposit_mode === "DEFAULT" &&
+            (bookingPolicy?.deposits_enabled ?? false));
+        const deposit = depositsEnabled
+          ? resolveDepositPolicy({
+              totalMinor,
+              locationOverrideFixed:
+                locationService.deposit_fixed_override_minor,
+              locationOverridePercentage:
+                locationService.deposit_percentage_override,
+              variantFixed:
+                hold.service_variants.deposit_fixed_minor,
+              variantPercentage:
+                hold.service_variants.deposit_percentage,
+              policy: depositPolicy,
+            })
+          : {
+              depositMinor: 0,
+              paymentWindowMinutes:
+                depositPolicy?.payment_window_minutes ?? 15,
+              snapshot: {
+                source:
+                  customer.deposit_mode === "EXEMPT"
+                    ? "CUSTOMER_EXEMPT"
+                    : "LOCATION_DISABLED",
+                mode: "NONE",
+                paymentWindowMinutes:
+                  depositPolicy?.payment_window_minutes ?? 15,
+              } satisfies Prisma.InputJsonObject,
+            };
         const status =
           deposit.depositMinor > 0 ? "PENDING_PAYMENT" : "CONFIRMED";
         const cancellationSnapshot = {

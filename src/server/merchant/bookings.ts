@@ -98,7 +98,9 @@ export async function updateMerchantBookingStatus(input: {
         );
       }
       if (
-        ["CANCELLED", "NO_SHOW"].includes(input.nextStatus) &&
+        ["CANCELLED", "NO_SHOW", "EXPIRED"].includes(
+          input.nextStatus,
+        ) &&
         !input.reason
       ) {
         throw new AppError(

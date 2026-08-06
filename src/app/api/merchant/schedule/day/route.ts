@@ -6,9 +6,9 @@ import {
 } from "@/server/auth/session";
 import { jsonError, jsonSuccess } from "@/server/http/response";
 import { resolveMerchantContext } from "@/server/merchant/context";
-import { setMerchantDayClosure } from "@/server/merchant/management";
+import { setMerchantDaySchedule } from "@/server/merchant/management";
 import {
-  merchantDayClosureSchema,
+  merchantDayScheduleSchema,
   merchantScopeSchema,
 } from "@/server/merchant/schemas";
 import { getRequestId } from "@/server/security/request";
@@ -27,9 +27,11 @@ export async function PUT(request: NextRequest) {
       organizationSlug: scope.organization,
       locationSlug: scope.location,
     });
-    const input = merchantDayClosureSchema.parse(await request.json());
+    const input = merchantDayScheduleSchema.parse(
+      await request.json(),
+    );
     return jsonSuccess(
-      await setMerchantDayClosure({
+      await setMerchantDaySchedule({
         context,
         ...input,
         requestId,

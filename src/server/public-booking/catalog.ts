@@ -2,8 +2,10 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 
+import { calculateDepositMinor } from "../booking/pricing";
 import { prisma } from "../database/prisma";
 import { AppError } from "../http/errors";
+import { publicMediaUrl } from "../storage/provider";
 import { databaseTimeToString } from "../time/timezone";
 import {
   resolvePublicLocation,
@@ -14,6 +16,9 @@ export type PublicCatalog = {
   organization: {
     name: string;
     slug: string;
+    description: string;
+    logoUrl: string | null;
+    coverImageUrl: string | null;
   };
   location: {
     name: string;
@@ -25,6 +30,7 @@ export type PublicCatalog = {
     currency: string;
     maximumAdvanceDays: number;
     minimumLeadMinutes: number;
+    coverImageUrl: string | null;
   };
   businessHours: Array<{
     dayOfWeek: number;
@@ -32,12 +38,19 @@ export type PublicCatalog = {
     closesAt: string;
     isClosed: boolean;
   }>;
+  daySchedules: Array<{
+    date: string;
+    isClosed: boolean;
+    opensAt: string | null;
+    closesAt: string | null;
+  }>;
   services: Array<{
     id: string;
     name: string;
     description: string;
     bookingNotice: string;
     categoryName: string | null;
+    imageUrl: string | null;
     variants: Array<{
       id: string;
       name: string;
@@ -49,6 +62,7 @@ export type PublicCatalog = {
         displayName: string;
         title: string;
         skills: string[];
+        photoUrl: string | null;
       }>;
     }>;
   }>;
@@ -67,7 +81,7 @@ export async function getPublicCatalog(
 const getCachedPublicCatalogBySlug = unstable_cache(
   async (organizationSlug: string, locationSlug: string) =>
     getPublicCatalog({ organizationSlug, locationSlug }),
-  ["public-booking-catalog"],
+  ["public-booking-catalog-v2"],
   {
     revalidate: 30,
     tags: ["public-booking-catalog"],
@@ -95,16 +109,48 @@ export async function getPublicCatalogForContext(
       description: true,
       address: true,
       phone: true,
+      cover_image_path: true,
+      organizations: {
+        select: {
+          brand_description: true,
+          brand_logo_path: true,
+          brand_cover_image_path: true,
+        },
+      },
       location_booking_policies: {
         select: {
           maximum_advance_days: true,
           minimum_lead_minutes: true,
+          deposits_enabled: true,
+        },
+      },
+      deposit_policies: {
+        where: {
+          is_active: true,
+        },
+        select: {
+          service_variant_id: true,
+          mode: true,
+          fixed_amount_minor: true,
+          percentage: true,
         },
       },
       location_business_hours: {
         orderBy: [{ day_of_week: "asc" }, { segment_index: "asc" }],
         select: {
           day_of_week: true,
+          opens_at: true,
+          closes_at: true,
+          is_closed: true,
+        },
+      },
+      location_day_schedules: {
+        orderBy: [
+          { schedule_date: "asc" },
+          { segment_index: "asc" },
+        ],
+        select: {
+          schedule_date: true,
           opens_at: true,
           closes_at: true,
           is_closed: true,
@@ -128,12 +174,15 @@ export async function getPublicCatalogForContext(
         select: {
           price_override_minor: true,
           duration_override_minutes: true,
+          deposit_fixed_override_minor: true,
+          deposit_percentage_override: true,
           services: {
             select: {
               id: true,
               name: true,
               description: true,
               booking_notice: true,
+              image_path: true,
               service_categories: {
                 select: {
                   name: true,
@@ -172,6 +221,7 @@ export async function getPublicCatalogForContext(
                   display_name: true,
                   title: true,
                   skills: true,
+                  photo_path: true,
                 },
               },
             },
@@ -197,19 +247,58 @@ export async function getPublicCatalogForContext(
         description: service.description,
         bookingNotice: service.booking_notice,
         categoryName: service.service_categories?.name ?? null,
+        imageUrl: publicMediaUrl(service.image_path),
         variants: [],
       };
       servicesById.set(service.id, publicService);
     }
 
     const priceMinor = item.price_override_minor ?? variant.price_minor;
-    const depositMinor = variant.deposit_fixed_minor
-      ? Math.min(priceMinor, variant.deposit_fixed_minor)
-      : variant.deposit_percentage
-        ? Math.round(
-            (priceMinor * Number(variant.deposit_percentage)) / 100,
-          )
-        : 0;
+    const depositPolicy =
+      location.deposit_policies.find(
+        (policy) => policy.service_variant_id === variant.id,
+      ) ??
+      location.deposit_policies.find(
+        (policy) => policy.service_variant_id === null,
+      );
+    const depositsEnabled =
+      location.location_booking_policies?.deposits_enabled ?? false;
+    const depositMinor = depositsEnabled
+      ? item.deposit_fixed_override_minor !== null
+        ? calculateDepositMinor(priceMinor, {
+            mode: "FIXED",
+            fixedAmountMinor: item.deposit_fixed_override_minor,
+          })
+        : item.deposit_percentage_override !== null
+          ? calculateDepositMinor(priceMinor, {
+              mode: "PERCENTAGE",
+              percentage: Number(item.deposit_percentage_override),
+            })
+          : variant.deposit_fixed_minor !== null
+            ? calculateDepositMinor(priceMinor, {
+                mode: "FIXED",
+                fixedAmountMinor: variant.deposit_fixed_minor,
+              })
+            : variant.deposit_percentage !== null
+              ? calculateDepositMinor(priceMinor, {
+                  mode: "PERCENTAGE",
+                  percentage: Number(variant.deposit_percentage),
+                })
+              : depositPolicy?.mode === "FIXED"
+                ? calculateDepositMinor(priceMinor, {
+                    mode: "FIXED",
+                    fixedAmountMinor:
+                      depositPolicy.fixed_amount_minor ?? 0,
+                  })
+                : depositPolicy?.mode === "PERCENTAGE"
+                  ? calculateDepositMinor(priceMinor, {
+                      mode: "PERCENTAGE",
+                      percentage: Number(
+                        depositPolicy.percentage ?? 0,
+                      ),
+                    })
+                  : 0
+      : 0;
 
     publicService.variants.push({
       id: variant.id,
@@ -223,6 +312,7 @@ export async function getPublicCatalogForContext(
         displayName: staff_profiles.display_name,
         title: staff_profiles.title,
         skills: staff_profiles.skills,
+        photoUrl: publicMediaUrl(staff_profiles.photo_path),
       })),
     });
   }
@@ -231,6 +321,11 @@ export async function getPublicCatalogForContext(
     organization: {
       name: context.organizationName,
       slug: context.organizationSlug,
+      description: location.organizations.brand_description,
+      logoUrl: publicMediaUrl(location.organizations.brand_logo_path),
+      coverImageUrl: publicMediaUrl(
+        location.organizations.brand_cover_image_path,
+      ),
     },
     location: {
       name: context.locationName,
@@ -244,12 +339,23 @@ export async function getPublicCatalogForContext(
         location.location_booking_policies?.maximum_advance_days ?? 60,
       minimumLeadMinutes:
         location.location_booking_policies?.minimum_lead_minutes ?? 60,
+      coverImageUrl: publicMediaUrl(location.cover_image_path),
     },
     businessHours: location.location_business_hours.map((hours) => ({
       dayOfWeek: hours.day_of_week,
       opensAt: databaseTimeToString(hours.opens_at),
       closesAt: databaseTimeToString(hours.closes_at),
       isClosed: hours.is_closed,
+    })),
+    daySchedules: location.location_day_schedules.map((schedule) => ({
+      date: schedule.schedule_date.toISOString().slice(0, 10),
+      isClosed: schedule.is_closed,
+      opensAt: schedule.opens_at
+        ? databaseTimeToString(schedule.opens_at)
+        : null,
+      closesAt: schedule.closes_at
+        ? databaseTimeToString(schedule.closes_at)
+        : null,
     })),
     services: [...servicesById.values()],
   };

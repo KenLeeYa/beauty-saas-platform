@@ -2,17 +2,22 @@
 
 import {
   BarChart3,
+  BadgeDollarSign,
   Bell,
   BookOpen,
   BriefcaseBusiness,
   Building2,
   CalendarDays,
+  Cake,
   Check,
   ChevronRight,
+  Clock3,
   CreditCard,
   ExternalLink,
+  ImagePlus,
   LayoutDashboard,
   LogOut,
+  LockKeyhole,
   Menu,
   PackagePlus,
   PauseCircle,
@@ -20,6 +25,7 @@ import {
   ReceiptText,
   Rocket,
   Settings,
+  ShieldBan,
   Store,
   TestTube2,
   UserRound,
@@ -28,6 +34,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import Image, { type ImageLoaderProps } from "next/image";
 import { useRouter } from "next/navigation";
 import {
   useMemo,
@@ -171,6 +178,27 @@ function localDate(date: Date, timezone: string): string {
   }).format(date);
 }
 
+function formatCompactLocalDateTime(
+  value: string,
+  timezone: string,
+): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${Number(part("month"))}/${Number(part("day"))} ${part("hour")}:${part("minute")}`;
+}
+
+function publicMediaLoader({ src }: ImageLoaderProps): string {
+  return src;
+}
+
 function StatCard({
   label,
   value,
@@ -223,9 +251,14 @@ export function MerchantWorkspace({
 }) {
   const router = useRouter();
   const [data, setData] = useState(initialData);
-  const [selectedDate, setSelectedDate] = useState(() =>
-    localDate(new Date(), initialData.location.timezone),
+  const initialSelectedDate = localDate(
+    new Date(),
+    initialData.location.timezone,
   );
+  const initialScheduleDay = initialData.calendarDays.find(
+    (day) => day.date === initialSelectedDate,
+  );
+  const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -235,6 +268,19 @@ export function MerchantWorkspace({
     useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scheduleMode, setScheduleMode] = useState<
+    "NORMAL" | "CUSTOM" | "CLOSED"
+  >(initialScheduleDay?.scheduleMode ?? "NORMAL");
+  const [scheduleReason, setScheduleReason] = useState(
+    initialScheduleDay?.scheduleReason ?? "",
+  );
+  const [scheduleSegments, setScheduleSegments] = useState<
+    Array<{ startsAt: string; endsAt: string }>
+  >(
+    initialScheduleDay?.scheduleMode === "CUSTOM"
+      ? initialScheduleDay.scheduleSegments
+      : (initialScheduleDay?.defaultScheduleSegments ?? []),
+  );
   const scope = `organization=${encodeURIComponent(
     data.organization.slug,
   )}&location=${encodeURIComponent(data.location.slug)}`;
@@ -244,6 +290,20 @@ export function MerchantWorkspace({
   const paymentConfirmationBooking = data.bookings.find(
     (booking) => booking.id === paymentConfirmationId,
   );
+
+  function selectCalendarDate(date: string): void {
+    const day = data.calendarDays.find(
+      (calendarDay) => calendarDay.date === date,
+    );
+    setSelectedDate(date);
+    setScheduleMode(day?.scheduleMode ?? "NORMAL");
+    setScheduleReason(day?.scheduleReason ?? "");
+    setScheduleSegments(
+      day?.scheduleMode === "CUSTOM"
+        ? day.scheduleSegments
+        : (day?.defaultScheduleSegments ?? []),
+    );
+  }
 
   const dayBookings = useMemo(
     () =>
@@ -298,6 +358,190 @@ export function MerchantWorkspace({
     return payload.data;
   }
 
+  async function uploadMedia(
+    kind:
+      | "ORGANIZATION_LOGO"
+      | "ORGANIZATION_COVER"
+      | "LOCATION_COVER"
+      | "SERVICE_IMAGE"
+      | "STAFF_PHOTO",
+    targetId: string,
+    file: File,
+  ): Promise<void> {
+    setIsSubmitting(true);
+    setError(null);
+    setFeedback(null);
+    const form = new FormData();
+    form.set("kind", kind);
+    form.set("targetId", targetId);
+    form.set("file", file);
+    try {
+      const response = await fetch(`/api/merchant/media?${scope}`, {
+        method: "POST",
+        headers: {
+          "x-csrf-token": csrfToken(),
+        },
+        body: form,
+      });
+      const payload = (await response.json()) as ApiEnvelope<{
+        path: string;
+        url: string;
+      }>;
+      if (!response.ok || !payload.data) {
+        throw new Error(payload.error?.message ?? "圖片上傳失敗。");
+      }
+      const url = payload.data.url;
+      setData((current) => ({
+        ...current,
+        organization:
+          kind === "ORGANIZATION_LOGO"
+            ? { ...current.organization, logoUrl: url }
+            : kind === "ORGANIZATION_COVER"
+              ? { ...current.organization, coverImageUrl: url }
+              : current.organization,
+        location:
+          kind === "LOCATION_COVER"
+            ? { ...current.location, coverImageUrl: url }
+            : current.location,
+        locations:
+          kind === "LOCATION_COVER"
+            ? current.locations.map((item) =>
+                item.id === targetId
+                  ? { ...item, coverImageUrl: url }
+                  : item,
+              )
+            : current.locations,
+        services:
+          kind === "SERVICE_IMAGE"
+            ? current.services.map((service) =>
+                service.id === targetId
+                  ? { ...service, imageUrl: url }
+                  : service,
+              )
+            : current.services,
+        staff:
+          kind === "STAFF_PHOTO"
+            ? current.staff.map((staff) =>
+                staff.id === targetId
+                  ? { ...staff, photoUrl: url }
+                  : staff,
+              )
+            : current.staff,
+      }));
+      setFeedback("圖片已更新。");
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "圖片上傳失敗。",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function saveDaySchedule(): Promise<void> {
+    setIsSubmitting(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      const segments = scheduleMode === "CUSTOM" ? scheduleSegments : [];
+      await mutate("/api/merchant/schedule/day", "PUT", {
+        date: selectedDate,
+        mode: scheduleMode,
+        reason: scheduleReason,
+        segments,
+      });
+      setData((current) => ({
+        ...current,
+        calendarDays: current.calendarDays.map((day) =>
+          day.date === selectedDate
+            ? {
+                ...day,
+                availableCount:
+                  scheduleMode === "CLOSED"
+                    ? 0
+                    : scheduleMode === "CUSTOM"
+                      ? 1
+                      : day.defaultScheduleSegments.length > 0
+                        ? 1
+                        : 0,
+                closedCount:
+                  scheduleMode === "CLOSED" ||
+                  (scheduleMode === "NORMAL" &&
+                    day.defaultScheduleSegments.length === 0)
+                    ? 1
+                    : 0,
+                scheduleMode,
+                scheduleReason,
+                scheduleSegments:
+                  scheduleMode === "CUSTOM"
+                    ? segments
+                    : day.defaultScheduleSegments,
+              }
+            : day,
+        ),
+      }));
+      setFeedback("當日開放時段已更新。");
+      router.refresh();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "日期設定失敗。",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function updateCustomer(
+    customerId: string,
+    update: {
+      birthday?: string;
+      depositMode?: "DEFAULT" | "REQUIRED" | "EXEMPT";
+      isBlacklisted?: boolean;
+      blacklistReason?: string;
+    },
+  ): Promise<void> {
+    setIsSubmitting(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      await mutate("/api/merchant/customers", "PATCH", {
+        customerId,
+        ...update,
+      });
+      setData((current) => ({
+        ...current,
+        customers: current.customers.map((customer) =>
+          customer.id === customerId
+            ? {
+                ...customer,
+                ...(update.birthday !== undefined
+                  ? { birthday: update.birthday || null }
+                  : {}),
+                ...(update.depositMode
+                  ? { depositMode: update.depositMode }
+                  : {}),
+                ...(update.isBlacklisted !== undefined
+                  ? {
+                      isBlacklisted: update.isBlacklisted,
+                      blacklistReason: update.isBlacklisted
+                        ? update.blacklistReason ?? null
+                        : null,
+                    }
+                  : {}),
+              }
+            : customer,
+        ),
+      }));
+      setFeedback("顧客資料已更新。");
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "顧客更新失敗。",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function updateBookingStatus(
     bookingId: string,
     nextStatus: string,
@@ -306,11 +550,13 @@ export function MerchantWorkspace({
     if (!booking) {
       return;
     }
-    const reason = ["CANCELLED", "NO_SHOW"].includes(nextStatus)
+    const reason = ["CANCELLED", "NO_SHOW", "EXPIRED"].includes(
+      nextStatus,
+    )
       ? window.prompt("請輸入狀態變更原因：")?.trim()
       : undefined;
     if (
-      ["CANCELLED", "NO_SHOW"].includes(nextStatus) &&
+      ["CANCELLED", "NO_SHOW", "EXPIRED"].includes(nextStatus) &&
       !reason
     ) {
       return;
@@ -525,14 +771,10 @@ export function MerchantWorkspace({
     return (
       <div className="divide-y divide-slate-200 border-y border-slate-200 bg-white">
         {bookings.map((booking) => {
-          const time = new Intl.DateTimeFormat("zh-TW", {
-            timeZone: data.location.timezone,
-            month: "numeric",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-          }).format(new Date(booking.startsAt));
+          const time = formatCompactLocalDateTime(
+            booking.startsAt,
+            data.location.timezone,
+          );
           return (
             <article
               key={booking.id}
@@ -574,6 +816,19 @@ export function MerchantWorkspace({
                     }
                   >
                     確認訂金
+                  </button>
+                ) : null}
+                {booking.status === "PENDING_PAYMENT" &&
+                can("booking.manage") ? (
+                  <button
+                    className="h-9 rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700"
+                    disabled={isSubmitting}
+                    type="button"
+                    onClick={() =>
+                      void updateBookingStatus(booking.id, "EXPIRED")
+                    }
+                  >
+                    標記失效
                   </button>
                 ) : null}
                 {booking.status === "CONFIRMED" ? (
@@ -732,7 +987,7 @@ export function MerchantWorkspace({
                 audience="merchant"
                 days={data.calendarDays}
                 selectedDate={selectedDate}
-                onSelectDate={setSelectedDate}
+                onSelectDate={selectCalendarDate}
               />
             </div>
           </section>
@@ -751,90 +1006,203 @@ export function MerchantWorkspace({
   }
 
   function renderCalendar(): ReactNode {
-    async function toggleDay(closed: boolean): Promise<void> {
-      const reason = window.prompt(
-        closed ? "請輸入關閉原因：" : "請輸入重新開放備註：",
-        closed ? "店休" : "恢復營業",
-      );
-      if (!reason?.trim()) {
-        return;
-      }
-      setIsSubmitting(true);
-      setError(null);
-      try {
-        await mutate("/api/merchant/schedule/day", "PUT", {
-          date: selectedDate,
-          closed,
-          reason: reason.trim(),
-        });
-        setData((current) => ({
-          ...current,
-          calendarDays: current.calendarDays.map((day) =>
-            day.date === selectedDate
-              ? {
-                  ...day,
-                  availableCount: closed ? 0 : 1,
-                  closedCount: closed ? 1 : 0,
-                }
-              : day,
-          ),
-        }));
-        setFeedback(closed ? "該日期已關閉預約。" : "該日期已重新開放。");
-      } catch (cause) {
-        setError(
-          cause instanceof Error ? cause.message : "日期設定失敗。",
-        );
-      } finally {
-        setIsSubmitting(false);
-      }
-    }
-
     const selectedCalendarDay = data.calendarDays.find(
       (day) => day.date === selectedDate,
     );
     return (
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_440px]">
         <section>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-slate-500">
-              點選日期查看預約，亦可安排店休。
-            </p>
-            {can("location.manage") ? (
-              <button
-                className={`h-10 rounded-md border px-4 text-sm font-semibold ${
-                  selectedCalendarDay?.closedCount
-                    ? "border-teal text-teal"
-                    : "border-red-200 text-red-700"
-                }`}
-                disabled={isSubmitting}
-                type="button"
-                onClick={() =>
-                  void toggleDay(
-                    !Boolean(selectedCalendarDay?.closedCount),
-                  )
-                }
-              >
-                {selectedCalendarDay?.closedCount
-                  ? "重新開放此日"
-                  : "關閉此日"}
-              </button>
-            ) : null}
-          </div>
+          <p className="mb-3 text-sm text-slate-500">
+            點選日期後，可使用每週營業時間、設定當日特別時段，或整日關閉。
+          </p>
           <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
             <MonthCalendar
               audience="merchant"
               days={data.calendarDays}
               selectedDate={selectedDate}
-              onSelectDate={setSelectedDate}
+              onSelectDate={selectCalendarDate}
             />
           </div>
         </section>
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-ink">
-            {selectedDate} 排程
-          </h2>
-          <BookingRows bookings={dayBookings} />
-        </section>
+        <div className="space-y-6">
+          <section aria-labelledby="day-schedule-heading">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2
+                  className="text-lg font-semibold text-ink"
+                  id="day-schedule-heading"
+                >
+                  {selectedDate} 開放時段
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  {selectedCalendarDay?.bookedCount ?? 0} 筆預約
+                </p>
+              </div>
+              <span
+                className={`rounded px-2 py-1 text-xs font-semibold ${
+                  scheduleMode === "CLOSED"
+                    ? "bg-red-100 text-red-700"
+                    : scheduleMode === "CUSTOM"
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-teal/10 text-teal"
+                }`}
+              >
+                {scheduleMode === "CLOSED"
+                  ? "整日關閉"
+                  : scheduleMode === "CUSTOM"
+                    ? "自訂時段"
+                    : "每週設定"}
+              </span>
+            </div>
+
+            {can("location.manage") ? (
+              <div className="border-y border-slate-200 bg-white px-4 py-5">
+                <div className="grid grid-cols-3 gap-2" role="group" aria-label="當日營業模式">
+                  {(
+                    [
+                      ["NORMAL", "正常營業"],
+                      ["CUSTOM", "自訂時段"],
+                      ["CLOSED", "整日關閉"],
+                    ] as const
+                  ).map(([mode, label]) => (
+                    <button
+                      aria-pressed={scheduleMode === mode}
+                      className={`min-h-10 rounded-md border px-2 text-xs font-semibold ${
+                        scheduleMode === mode
+                          ? "border-ink bg-ink text-white"
+                          : "border-slate-300 bg-white text-slate-700"
+                      }`}
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        setScheduleMode(mode);
+                        if (
+                          mode === "CUSTOM" &&
+                          scheduleSegments.length === 0
+                        ) {
+                          setScheduleSegments([
+                            { startsAt: "10:00", endsAt: "18:00" },
+                          ]);
+                        }
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {scheduleMode === "CUSTOM" ? (
+                  <div className="mt-4 space-y-3">
+                    {scheduleSegments.map((segment, index) => (
+                      <div
+                        className="grid grid-cols-[1fr_auto_1fr_36px] items-end gap-2"
+                        key={`${index}-${segment.startsAt}-${segment.endsAt}`}
+                      >
+                        <Field
+                          label={`時段 ${index + 1} 開始`}
+                          name={`schedule-start-${index}`}
+                          type="time"
+                          value={segment.startsAt}
+                          onChange={(value) =>
+                            setScheduleSegments((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, startsAt: value }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                        <span className="pb-3 text-slate-400">至</span>
+                        <Field
+                          label={`時段 ${index + 1} 結束`}
+                          name={`schedule-end-${index}`}
+                          type="time"
+                          value={segment.endsAt}
+                          onChange={(value) =>
+                            setScheduleSegments((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, endsAt: value }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                        <button
+                          aria-label={`移除時段 ${index + 1}`}
+                          className="mb-1 flex h-10 w-9 items-center justify-center rounded-md text-red-600 hover:bg-red-50 disabled:opacity-40"
+                          disabled={scheduleSegments.length === 1}
+                          title="移除時段"
+                          type="button"
+                          onClick={() =>
+                            setScheduleSegments((current) =>
+                              current.filter(
+                                (_, itemIndex) => itemIndex !== index,
+                              ),
+                            )
+                          }
+                        >
+                          <X aria-hidden="true" className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                    {scheduleSegments.length < 3 ? (
+                      <button
+                        className="inline-flex h-9 items-center gap-2 text-sm font-semibold text-teal"
+                        type="button"
+                        onClick={() =>
+                          setScheduleSegments((current) => [
+                            ...current,
+                            { startsAt: "", endsAt: "" },
+                          ])
+                        }
+                      >
+                        <Plus aria-hidden="true" className="h-4 w-4" />
+                        新增時段
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <label className="mt-4 block">
+                  <span className="text-sm font-medium text-slate-700">
+                    備註
+                  </span>
+                  <input
+                    className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-teal"
+                    maxLength={240}
+                    placeholder={
+                      scheduleMode === "CLOSED"
+                        ? "例如：店休、教育訓練"
+                        : "例如：節日調整"
+                    }
+                    value={scheduleReason}
+                    onChange={(event) =>
+                      setScheduleReason(event.target.value)
+                    }
+                  />
+                </label>
+                <button
+                  className="mt-4 inline-flex h-10 items-center gap-2 rounded-md bg-ink px-4 text-sm font-semibold text-white disabled:opacity-50"
+                  disabled={isSubmitting}
+                  type="button"
+                  onClick={() => void saveDaySchedule()}
+                >
+                  <Clock3 aria-hidden="true" className="h-4 w-4" />
+                  儲存當日設定
+                </button>
+              </div>
+            ) : null}
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-ink">
+              當日預約
+            </h2>
+            <BookingRows bookings={dayBookings} />
+          </section>
+        </div>
       </div>
     );
   }
@@ -874,6 +1242,17 @@ export function MerchantWorkspace({
   }
 
   function renderServices(): ReactNode {
+    const serviceGroups = new Map<
+      string,
+      MerchantWorkspaceData["services"]
+    >();
+    for (const service of data.services) {
+      const groupName = service.categoryName ?? "未分類";
+      serviceGroups.set(groupName, [
+        ...(serviceGroups.get(groupName) ?? []),
+        service,
+      ]);
+    }
     return (
       <div>
         <div className="mb-5 flex justify-end">
@@ -902,6 +1281,7 @@ export function MerchantWorkspace({
                 (form) => ({
                   name: form.get("name"),
                   variantName: form.get("variantName"),
+                  categoryName: form.get("categoryName"),
                   description: form.get("description"),
                   durationMinutes: Number(form.get("durationMinutes")),
                   priceMinor: Math.round(
@@ -913,6 +1293,12 @@ export function MerchantWorkspace({
           >
             <Field name="name" label="服務名稱" required />
             <Field name="variantName" label="規格名稱" required />
+            <Field
+              name="categoryName"
+              label="服務群組"
+              defaultValue="一般服務"
+              required
+            />
             <Field
               name="durationMinutes"
               label="服務分鐘"
@@ -945,88 +1331,145 @@ export function MerchantWorkspace({
             body="新增服務後即可安排人員並開放線上預約。"
           />
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {data.services.map((service) => (
-              <article
-                key={service.locationServiceId}
-                className="rounded-md border border-slate-200 bg-white p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-ink">{service.name}</p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {service.variantName} · {service.durationMinutes} 分鐘
-                    </p>
-                  </div>
-                  {can("catalog.manage") ? (
-                    <button
-                      aria-label={
-                        service.onlineBookingEnabled
-                          ? "關閉線上預約"
-                          : "開啟線上預約"
-                      }
-                      className={`relative h-6 w-11 rounded-full transition ${
-                        service.onlineBookingEnabled
-                          ? "bg-teal"
-                          : "bg-slate-300"
-                      }`}
-                      title={
-                        service.onlineBookingEnabled
-                          ? "關閉線上預約"
-                          : "開啟線上預約"
-                      }
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await mutate(
-                            "/api/merchant/services",
-                            "PATCH",
-                            {
-                              locationServiceId:
-                                service.locationServiceId,
-                              onlineBookingEnabled:
-                                !service.onlineBookingEnabled,
-                            },
-                          );
-                          setData((current) => ({
-                            ...current,
-                            services: current.services.map((item) =>
-                              item.locationServiceId ===
-                              service.locationServiceId
-                                ? {
-                                    ...item,
-                                    onlineBookingEnabled:
-                                      !item.onlineBookingEnabled,
-                                  }
-                                : item,
-                            ),
-                          }));
-                        } catch (cause) {
-                          setError(
-                            cause instanceof Error
-                              ? cause.message
-                              : "設定失敗。",
-                          );
-                        }
-                      }}
-                    >
-                      <span
-                        className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${
-                          service.onlineBookingEnabled
-                            ? "left-6"
-                            : "left-1"
-                        }`}
-                      />
-                    </button>
-                  ) : null}
+          <div className="space-y-7">
+            {[...serviceGroups.entries()].map(([groupName, services]) => (
+              <section aria-label={`${groupName}服務群組`} key={groupName}>
+                <div className="mb-3 flex items-center gap-2">
+                  <PackagePlus
+                    aria-hidden="true"
+                    className="h-4 w-4 text-teal"
+                  />
+                  <h2 className="font-semibold text-ink">{groupName}</h2>
+                  <span className="text-xs text-slate-400">
+                    {services.length} 項
+                  </span>
                 </div>
-                <p className="mt-5 text-xl font-semibold text-ink">
-                  {formatMoney(service.priceMinor, data.stats.currency)}
-                </p>
-                <p className="mt-2 text-xs text-slate-500">
-                  {service.staffCount} 位服務人員可承接
-                </p>
-              </article>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {services.map((service) => (
+                    <article
+                      key={service.locationServiceId}
+                      className="overflow-hidden rounded-md border border-slate-200 bg-white"
+                    >
+                      {service.imageUrl ? (
+                        <Image
+                          alt={`${service.name}服務圖片`}
+                          className="aspect-[16/9] w-full object-cover"
+                          height={360}
+                          loader={publicMediaLoader}
+                          src={service.imageUrl}
+                          unoptimized
+                          width={640}
+                        />
+                      ) : (
+                        <div className="flex aspect-[16/9] items-center justify-center bg-slate-100 text-slate-400">
+                          <ImagePlus
+                            aria-hidden="true"
+                            className="h-7 w-7"
+                          />
+                        </div>
+                      )}
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-ink">
+                              {service.name}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {service.variantName} · {service.durationMinutes}{" "}
+                              分鐘
+                            </p>
+                          </div>
+                          {can("catalog.manage") ? (
+                            <button
+                              aria-label={
+                                service.onlineBookingEnabled
+                                  ? "關閉線上預約"
+                                  : "開啟線上預約"
+                              }
+                              className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+                                service.onlineBookingEnabled
+                                  ? "bg-teal"
+                                  : "bg-slate-300"
+                              }`}
+                              title={
+                                service.onlineBookingEnabled
+                                  ? "關閉線上預約"
+                                  : "開啟線上預約"
+                              }
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await mutate(
+                                    "/api/merchant/services",
+                                    "PATCH",
+                                    {
+                                      locationServiceId:
+                                        service.locationServiceId,
+                                      onlineBookingEnabled:
+                                        !service.onlineBookingEnabled,
+                                    },
+                                  );
+                                  setData((current) => ({
+                                    ...current,
+                                    services: current.services.map((item) =>
+                                      item.locationServiceId ===
+                                      service.locationServiceId
+                                        ? {
+                                            ...item,
+                                            onlineBookingEnabled:
+                                              !item.onlineBookingEnabled,
+                                          }
+                                        : item,
+                                    ),
+                                  }));
+                                } catch (cause) {
+                                  setError(
+                                    cause instanceof Error
+                                      ? cause.message
+                                      : "設定失敗。",
+                                  );
+                                }
+                              }}
+                            >
+                              <span
+                                className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${
+                                  service.onlineBookingEnabled
+                                    ? "left-6"
+                                    : "left-1"
+                                }`}
+                              />
+                            </button>
+                          ) : null}
+                        </div>
+                        <p className="mt-5 text-xl font-semibold text-ink">
+                          {formatMoney(
+                            service.priceMinor,
+                            data.stats.currency,
+                          )}
+                        </p>
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <p className="text-xs text-slate-500">
+                            {service.staffCount} 位服務人員可承接
+                          </p>
+                          {can("catalog.manage") ? (
+                            <MediaUploadButton
+                              busy={isSubmitting}
+                              label="上傳服務圖片"
+                              onFile={(file) =>
+                                void uploadMedia(
+                                  "SERVICE_IMAGE",
+                                  service.id,
+                                  file,
+                                )
+                              }
+                            />
+                          ) : null}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         )}
@@ -1079,15 +1522,31 @@ export function MerchantWorkspace({
                 key={staff.id}
                 className="rounded-md border border-slate-200 bg-white p-4"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gold/10 font-semibold text-gold">
-                  {staff.displayName.slice(0, 1)}
+                <div className="flex items-start gap-3">
+                  {staff.photoUrl ? (
+                    <Image
+                      alt={`${staff.displayName} 的照片`}
+                      className="h-16 w-16 shrink-0 rounded-md object-cover"
+                      height={64}
+                      loader={publicMediaLoader}
+                      src={staff.photoUrl}
+                      unoptimized
+                      width={64}
+                    />
+                  ) : (
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-gold/10 text-lg font-semibold text-gold">
+                      {staff.displayName.slice(0, 1)}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-ink">
+                      {staff.displayName}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {staff.title || "服務人員"}
+                    </p>
+                  </div>
                 </div>
-                <p className="mt-4 font-semibold text-ink">
-                  {staff.displayName}
-                </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  {staff.title || "服務人員"}
-                </p>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {staff.skills.map((skill) => (
                     <span
@@ -1098,6 +1557,17 @@ export function MerchantWorkspace({
                     </span>
                   ))}
                 </div>
+                {can("staff.manage") ? (
+                  <div className="mt-4 border-t border-slate-100 pt-3">
+                    <MediaUploadButton
+                      busy={isSubmitting}
+                      label="更新人員照片"
+                      onFile={(file) =>
+                        void uploadMedia("STAFF_PHOTO", staff.id, file)
+                      }
+                    />
+                  </div>
+                ) : null}
               </article>
             ))}
           </div>
@@ -1200,15 +1670,34 @@ export function MerchantWorkspace({
                   displayName: form.get("displayName"),
                   phone: form.get("phone"),
                   email: form.get("email"),
+                  birthday: form.get("birthday"),
                 }),
               )
             }
           >
             <Field name="displayName" label="顧客姓名" required />
             <Field name="phone" label="手機" required />
-            <Field name="email" label="Email" type="email" wide />
+            <Field name="email" label="Email" type="email" />
+            <Field name="birthday" label="生日" type="date" />
             <SubmitButton busy={isSubmitting} />
           </form>
+        ) : null}
+        {!data.features.customerBlacklist ? (
+          <div className="mb-5 flex items-start gap-3 border-y border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <LockKeyhole aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">顧客黑名單為加值功能</p>
+              <p className="mt-1 text-amber-800">
+                可記錄爽約與經常取消的顧客，並阻擋相同聯絡方式再次線上預約。
+              </p>
+            </div>
+            <Link
+              className="shrink-0 font-semibold underline"
+              href={`/merchant/subscription?${scope}`}
+            >
+              查看方案
+            </Link>
+          </div>
         ) : null}
         {data.customers.length === 0 ? (
           <EmptyState
@@ -1220,25 +1709,131 @@ export function MerchantWorkspace({
             {data.customers.map((customer) => (
               <article
                 key={customer.id}
-                className="grid gap-2 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_130px_150px] sm:items-center"
+                className="px-4 py-5"
               >
-                <div>
-                  <p className="font-semibold text-ink">
-                    {customer.displayName}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {customer.phone ?? "未提供手機"}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-ink">
+                        {customer.displayName}
+                      </p>
+                      {customer.isBlacklisted ? (
+                        <span className="rounded bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
+                          黑名單
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {customer.phone ?? "未提供手機"}
+                    </p>
+                  </div>
+                  <p className="text-lg font-semibold text-ink">
+                    {formatMoney(
+                      Number(customer.totalSpendMinor),
+                      data.stats.currency,
+                    )}
                   </p>
                 </div>
-                <p className="text-sm text-slate-600">
-                  完成 {customer.completedCount} 次
-                </p>
-                <p className="text-sm font-semibold text-ink sm:text-right">
-                  {formatMoney(
-                    Number(customer.totalSpendMinor),
-                    data.stats.currency,
-                  )}
-                </p>
+                <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                  <span className="rounded-md bg-emerald-50 px-3 py-2 text-emerald-800">
+                    完成 {customer.completedCount} 次
+                  </span>
+                  <span className="rounded-md bg-amber-50 px-3 py-2 text-amber-800">
+                    取消 {customer.cancelledCount} 次
+                  </span>
+                  <span className="rounded-md bg-red-50 px-3 py-2 text-red-700">
+                    爽約 {customer.noShowCount} 次
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 md:grid-cols-[minmax(150px,0.8fr)_minmax(190px,1fr)_auto] md:items-end">
+                  <label>
+                    <span className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                      <Cake aria-hidden="true" className="h-4 w-4" />
+                      會員生日
+                    </span>
+                    <input
+                      className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                      defaultValue={customer.birthday ?? ""}
+                      disabled={!can("customer.manage") || isSubmitting}
+                      type="date"
+                      onBlur={(event) => {
+                        if (event.target.value !== (customer.birthday ?? "")) {
+                          void updateCustomer(customer.id, {
+                            birthday: event.target.value,
+                          });
+                        }
+                      }}
+                    />
+                  </label>
+                  <label>
+                    <span className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                      <BadgeDollarSign aria-hidden="true" className="h-4 w-4" />
+                      此顧客訂金規則
+                    </span>
+                    <select
+                      className="mt-2 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100"
+                      disabled={
+                        !can("customer.manage") ||
+                        !data.features.deposits ||
+                        isSubmitting
+                      }
+                      value={customer.depositMode}
+                      onChange={(event) =>
+                        void updateCustomer(customer.id, {
+                          depositMode: event.target.value as
+                            | "DEFAULT"
+                            | "REQUIRED"
+                            | "EXEMPT",
+                        })
+                      }
+                    >
+                      <option value="DEFAULT">依分店設定</option>
+                      <option value="REQUIRED">指定收取訂金</option>
+                      <option value="EXEMPT">免收訂金</option>
+                    </select>
+                  </label>
+                  {can("customer.manage") &&
+                  data.features.customerBlacklist ? (
+                    <button
+                      className={`flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold ${
+                        customer.isBlacklisted
+                          ? "border-slate-300 text-slate-700"
+                          : "border-red-200 text-red-700"
+                      }`}
+                      disabled={isSubmitting}
+                      type="button"
+                      onClick={() => {
+                        if (customer.isBlacklisted) {
+                          if (window.confirm("確定將此顧客移出黑名單？")) {
+                            void updateCustomer(customer.id, {
+                              isBlacklisted: false,
+                            });
+                          }
+                          return;
+                        }
+                        const reason = window
+                          .prompt(
+                            "請輸入列入黑名單原因，例如爽約或多次臨時取消：",
+                          )
+                          ?.trim();
+                        if (reason) {
+                          void updateCustomer(customer.id, {
+                            isBlacklisted: true,
+                            blacklistReason: reason,
+                          });
+                        }
+                      }}
+                    >
+                      <ShieldBan aria-hidden="true" className="h-4 w-4" />
+                      {customer.isBlacklisted ? "移出黑名單" : "列入黑名單"}
+                    </button>
+                  ) : null}
+                </div>
+                {customer.blacklistReason ? (
+                  <p className="mt-3 text-xs text-red-700">
+                    黑名單原因：{customer.blacklistReason}
+                  </p>
+                ) : null}
               </article>
             ))}
           </div>
@@ -1256,6 +1851,7 @@ export function MerchantWorkspace({
       setError(null);
       try {
         await mutate("/api/merchant/location", "PATCH", {
+          action: "BOOKING_STATE",
           bookingState,
           onlineBookingEnabled,
         });
@@ -1286,16 +1882,76 @@ export function MerchantWorkspace({
       }
     }
 
+    async function saveLocationProfile(
+      event: FormEvent<HTMLFormElement>,
+    ): Promise<void> {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const profile = {
+        name: String(form.get("name") ?? ""),
+        description: String(form.get("description") ?? ""),
+        address: String(form.get("address") ?? ""),
+        phone: String(form.get("phone") ?? ""),
+      };
+      setIsSubmitting(true);
+      setError(null);
+      setFeedback(null);
+      try {
+        await mutate("/api/merchant/location", "PATCH", {
+          action: "PROFILE",
+          ...profile,
+        });
+        setData((current) => ({
+          ...current,
+          location: { ...current.location, ...profile },
+          locations: current.locations.map((item) =>
+            item.id === current.location.id
+              ? { ...item, ...profile }
+              : item,
+          ),
+        }));
+        setFeedback("分店資料已更新。");
+      } catch (cause) {
+        setError(
+          cause instanceof Error ? cause.message : "分店資料更新失敗。",
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+
     return (
       <div className="space-y-4">
         {data.locations.map((location) => (
           <article
             key={location.id}
-            className="rounded-md border border-slate-200 bg-white p-5"
+            className="overflow-hidden rounded-md border border-slate-200 bg-white"
           >
-            <div className="flex flex-wrap items-start justify-between gap-4">
+            {location.coverImageUrl ? (
+              <Image
+                alt={`${location.name} 店外觀`}
+                className="aspect-[21/7] w-full object-cover"
+                height={420}
+                loader={publicMediaLoader}
+                src={location.coverImageUrl}
+                unoptimized
+                width={1260}
+              />
+            ) : (
+              <div className="flex aspect-[21/5] items-center justify-center bg-slate-100 text-slate-400">
+                <Building2 aria-hidden="true" className="h-8 w-8" />
+              </div>
+            )}
+            <div className="flex flex-wrap items-start justify-between gap-4 px-5 pt-5">
               <div>
-                <p className="font-semibold text-ink">{location.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-ink">{location.name}</p>
+                  {location.id === data.location.id ? (
+                    <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                      目前分店
+                    </span>
+                  ) : null}
+                </div>
                 <p className="mt-1 text-sm text-slate-500">
                   代碼 {location.code} · {location.slug}
                 </p>
@@ -1314,33 +1970,95 @@ export function MerchantWorkspace({
                     : "關閉"}
               </span>
             </div>
+            {location.id !== data.location.id ? (
+              <div className="px-5 pb-5">
+                <p className="mt-3 text-sm text-slate-600">
+                  {location.description || "尚未填寫分店介紹"}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  {location.address || "尚未填寫地址"} · {location.phone || "尚未填寫電話"}
+                </p>
+                <Link
+                  className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-teal"
+                  href={`/merchant/locations?organization=${encodeURIComponent(
+                    data.organization.slug,
+                  )}&location=${encodeURIComponent(location.slug)}`}
+                >
+                  切換至此分店
+                  <ChevronRight aria-hidden="true" className="h-4 w-4" />
+                </Link>
+              </div>
+            ) : null}
             {location.id === data.location.id &&
             can("location.manage") ? (
-              <div className="mt-5 flex flex-wrap gap-2">
-                <button
-                  className="h-10 rounded-md bg-teal px-4 text-sm font-semibold text-white"
-                  disabled={isSubmitting}
-                  type="button"
-                  onClick={() => void updateLocation("OPEN", true)}
+              <div className="px-5 pb-5">
+                <div className="mt-5 flex flex-wrap items-center gap-2 border-y border-slate-100 py-4">
+                  <button
+                    className="h-10 rounded-md bg-teal px-4 text-sm font-semibold text-white"
+                    disabled={isSubmitting}
+                    type="button"
+                    onClick={() => void updateLocation("OPEN", true)}
+                  >
+                    開放
+                  </button>
+                  <button
+                    className="h-10 rounded-md border border-slate-300 px-4 text-sm font-semibold text-ink"
+                    disabled={isSubmitting}
+                    type="button"
+                    onClick={() => void updateLocation("PAUSED", true)}
+                  >
+                    暫停
+                  </button>
+                  <button
+                    className="h-10 rounded-md border border-red-200 px-4 text-sm font-semibold text-red-700"
+                    disabled={isSubmitting}
+                    type="button"
+                    onClick={() => void updateLocation("CLOSED", false)}
+                  >
+                    關閉
+                  </button>
+                  <MediaUploadButton
+                    busy={isSubmitting}
+                    label="更新店外觀照"
+                    onFile={(file) =>
+                      void uploadMedia("LOCATION_COVER", location.id, file)
+                    }
+                  />
+                </div>
+                <form
+                  className="mt-5 grid gap-4 sm:grid-cols-2"
+                  onSubmit={(event) => void saveLocationProfile(event)}
                 >
-                  開放
-                </button>
-                <button
-                  className="h-10 rounded-md border border-slate-300 px-4 text-sm font-semibold text-ink"
-                  disabled={isSubmitting}
-                  type="button"
-                  onClick={() => void updateLocation("PAUSED", true)}
-                >
-                  暫停
-                </button>
-                <button
-                  className="h-10 rounded-md border border-red-200 px-4 text-sm font-semibold text-red-700"
-                  disabled={isSubmitting}
-                  type="button"
-                  onClick={() => void updateLocation("CLOSED", false)}
-                >
-                  關閉
-                </button>
+                  <Field
+                    defaultValue={location.name}
+                    label="分店名稱"
+                    name="name"
+                    required
+                  />
+                  <Field
+                    defaultValue={location.phone}
+                    label="分店電話"
+                    name="phone"
+                  />
+                  <Field
+                    defaultValue={location.address}
+                    label="分店地址"
+                    name="address"
+                    wide
+                  />
+                  <label className="sm:col-span-2">
+                    <span className="text-sm font-medium text-slate-700">
+                      分店介紹
+                    </span>
+                    <textarea
+                      className="mt-2 min-h-24 w-full rounded-md border border-slate-300 p-3"
+                      defaultValue={location.description}
+                      maxLength={1000}
+                      name="description"
+                    />
+                  </label>
+                  <SubmitButton busy={isSubmitting} />
+                </form>
               </div>
             ) : null}
           </article>
@@ -1916,8 +2634,321 @@ export function MerchantWorkspace({
       ]),
     );
 
+    async function saveOrganizationProfile(
+      event: FormEvent<HTMLFormElement>,
+    ): Promise<void> {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const profile = {
+        name: String(form.get("name") ?? ""),
+        businessName: String(form.get("businessName") ?? ""),
+        entityType: String(form.get("entityType")) as
+          | "SOLE_PROPRIETOR"
+          | "COMPANY",
+        email: String(form.get("email") ?? ""),
+        phone: String(form.get("phone") ?? ""),
+        brandDescription: String(form.get("brandDescription") ?? ""),
+      };
+      setIsSubmitting(true);
+      setError(null);
+      setFeedback(null);
+      try {
+        await mutate("/api/merchant/organization", "PATCH", profile);
+        setData((current) => ({
+          ...current,
+          organization: { ...current.organization, ...profile },
+        }));
+        setFeedback("品牌與公司資料已更新。");
+      } catch (cause) {
+        setError(
+          cause instanceof Error ? cause.message : "品牌資料更新失敗。",
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+
+    async function saveBookingSettings(
+      event: FormEvent<HTMLFormElement>,
+    ): Promise<void> {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const settings = {
+        onlineBookingEnabled: form.get("onlineBookingEnabled") === "on",
+        depositsEnabled:
+          data.features.deposits && form.get("depositsEnabled") === "on",
+        depositMode: String(
+          form.get("depositMode") ?? data.bookingSettings.depositMode,
+        ) as
+          | "FIXED"
+          | "PERCENTAGE",
+        depositAmountMinor: Math.round(
+          Number(
+            form.get("depositAmount") ??
+              data.bookingSettings.depositAmountMinor / 100,
+          ) * 100,
+        ),
+        depositPercentage: Number(
+          form.get("depositPercentage") ??
+            data.bookingSettings.depositPercentage,
+        ),
+      };
+      setIsSubmitting(true);
+      setError(null);
+      setFeedback(null);
+      try {
+        await mutate("/api/merchant/settings", "PATCH", settings);
+        setData((current) => ({
+          ...current,
+          bookingSettings: settings,
+          location: {
+            ...current.location,
+            onlineBookingEnabled: settings.onlineBookingEnabled,
+            bookingState: settings.onlineBookingEnabled ? "OPEN" : "PAUSED",
+          },
+          locations: current.locations.map((item) =>
+            item.id === current.location.id
+              ? {
+                  ...item,
+                  onlineBookingEnabled: settings.onlineBookingEnabled,
+                  bookingState: settings.onlineBookingEnabled
+                    ? "OPEN"
+                    : "PAUSED",
+                }
+              : item,
+          ),
+        }));
+        setFeedback("預約與訂金設定已更新。");
+      } catch (cause) {
+        setError(
+          cause instanceof Error ? cause.message : "預約設定更新失敗。",
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+
     return (
       <div className="space-y-8">
+        <section className="border-y border-slate-200 bg-white">
+          {data.organization.coverImageUrl ? (
+            <Image
+              alt={`${data.organization.name} 品牌封面`}
+              className="aspect-[21/6] w-full object-cover"
+              height={360}
+              loader={publicMediaLoader}
+              src={data.organization.coverImageUrl}
+              unoptimized
+              width={1260}
+            />
+          ) : (
+            <div className="flex aspect-[21/4] items-center justify-center bg-slate-100 text-slate-400">
+              <Store aria-hidden="true" className="h-9 w-9" />
+            </div>
+          )}
+          <div className="px-5 py-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                {data.organization.logoUrl ? (
+                  <Image
+                    alt={`${data.organization.name} Logo`}
+                    className="h-16 w-16 rounded-md border border-slate-200 bg-white object-cover"
+                    height={64}
+                    loader={publicMediaLoader}
+                    src={data.organization.logoUrl}
+                    unoptimized
+                    width={64}
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-md bg-ink text-xl font-semibold text-white">
+                    {data.organization.name.slice(0, 1)}
+                  </div>
+                )}
+                <div>
+                  <h2 className="font-semibold text-ink">品牌與公司資料</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {data.organization.entityType === "COMPANY"
+                      ? "企業戶"
+                      : "個體戶"}
+                    · {data.locations.length} 間分店
+                  </p>
+                </div>
+              </div>
+              {can("organization.manage") ? (
+                <div className="flex flex-wrap gap-2">
+                  <MediaUploadButton
+                    busy={isSubmitting}
+                    label="更新 Logo"
+                    onFile={(file) =>
+                      void uploadMedia(
+                        "ORGANIZATION_LOGO",
+                        data.organization.id,
+                        file,
+                      )
+                    }
+                  />
+                  <MediaUploadButton
+                    busy={isSubmitting}
+                    label="更新品牌封面"
+                    onFile={(file) =>
+                      void uploadMedia(
+                        "ORGANIZATION_COVER",
+                        data.organization.id,
+                        file,
+                      )
+                    }
+                  />
+                </div>
+              ) : null}
+            </div>
+            {can("organization.manage") ? (
+              <form
+                className="mt-6 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2"
+                onSubmit={(event) => void saveOrganizationProfile(event)}
+              >
+                <Field
+                  defaultValue={data.organization.name}
+                  label="品牌名稱"
+                  name="name"
+                  required
+                />
+                <Field
+                  defaultValue={data.organization.businessName}
+                  label="公司／商業登記名稱"
+                  name="businessName"
+                  required
+                />
+                <label>
+                  <span className="text-sm font-medium text-slate-700">
+                    帳戶類型
+                  </span>
+                  <select
+                    className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3"
+                    defaultValue={data.organization.entityType}
+                    name="entityType"
+                  >
+                    <option value="SOLE_PROPRIETOR">個體戶</option>
+                    <option value="COMPANY">企業戶</option>
+                  </select>
+                </label>
+                <Field
+                  defaultValue={data.organization.phone}
+                  label="公司電話"
+                  name="phone"
+                  required
+                />
+                <Field
+                  defaultValue={data.organization.email}
+                  label="公司 Email"
+                  name="email"
+                  required
+                  type="email"
+                  wide
+                />
+                <label className="sm:col-span-2">
+                  <span className="text-sm font-medium text-slate-700">
+                    品牌介紹
+                  </span>
+                  <textarea
+                    className="mt-2 min-h-28 w-full rounded-md border border-slate-300 p-3"
+                    defaultValue={data.organization.brandDescription}
+                    maxLength={1000}
+                    name="brandDescription"
+                  />
+                </label>
+                <SubmitButton busy={isSubmitting} />
+              </form>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="border-y border-slate-200 bg-white px-5 py-6">
+          <div className="flex items-center gap-2">
+            <BadgeDollarSign aria-hidden="true" className="h-5 w-5 text-teal" />
+            <h2 className="font-semibold text-ink">預約與訂金</h2>
+          </div>
+          <form
+            className="mt-5 grid gap-5 sm:grid-cols-2"
+            onSubmit={(event) => void saveBookingSettings(event)}
+          >
+            <label className="flex min-h-14 items-center justify-between gap-4 border-b border-slate-100 pb-4 sm:col-span-2">
+              <span>
+                <span className="block text-sm font-semibold text-ink">
+                  開放線上預約
+                </span>
+                <span className="mt-1 block text-xs text-slate-500">
+                  關閉後顧客無法從公開頁建立新預約
+                </span>
+              </span>
+              <input
+                className="h-5 w-5 accent-teal"
+                defaultChecked={data.location.onlineBookingEnabled}
+                disabled={!can("location.manage") || isSubmitting}
+                name="onlineBookingEnabled"
+                type="checkbox"
+              />
+            </label>
+            <label className="flex min-h-14 items-center justify-between gap-4 border-b border-slate-100 pb-4 sm:col-span-2">
+              <span>
+                <span className="block text-sm font-semibold text-ink">
+                  收取訂金
+                </span>
+                <span className="mt-1 block text-xs text-slate-500">
+                  {data.features.deposits
+                    ? "套用分店預設規則，仍可在顧客頁個別指定"
+                    : "目前方案尚未啟用訂金功能"}
+                </span>
+              </span>
+              <input
+                className="h-5 w-5 accent-teal"
+                defaultChecked={data.bookingSettings.depositsEnabled}
+                disabled={
+                  !can("location.manage") ||
+                  !data.features.deposits ||
+                  isSubmitting
+                }
+                name="depositsEnabled"
+                type="checkbox"
+              />
+            </label>
+            <label>
+              <span className="text-sm font-medium text-slate-700">
+                訂金方式
+              </span>
+              <select
+                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3"
+                defaultValue={data.bookingSettings.depositMode}
+                disabled={!data.features.deposits}
+                name="depositMode"
+              >
+                <option value="FIXED">固定金額</option>
+                <option value="PERCENTAGE">服務金額比例</option>
+              </select>
+            </label>
+            <Field
+              defaultValue={String(
+                data.bookingSettings.depositAmountMinor / 100,
+              )}
+              disabled={!data.features.deposits}
+              label="固定訂金（TWD）"
+              min="0"
+              name="depositAmount"
+              type="number"
+            />
+            <Field
+              defaultValue={String(data.bookingSettings.depositPercentage)}
+              disabled={!data.features.deposits}
+              label="訂金比例（%）"
+              min="0"
+              name="depositPercentage"
+              type="number"
+            />
+            {can("location.manage") ? (
+              <SubmitButton busy={isSubmitting} />
+            ) : null}
+          </form>
+        </section>
+
         <div className="grid gap-5 lg:grid-cols-2">
           <section className="border-y border-slate-200 bg-white px-5 py-6">
             <h2 className="font-semibold text-ink">公開預約連結</h2>
@@ -2318,6 +3349,10 @@ function Field({
   required = false,
   min,
   wide = false,
+  value,
+  defaultValue,
+  disabled = false,
+  onChange,
 }: {
   label: string;
   name: string;
@@ -2325,6 +3360,10 @@ function Field({
   required?: boolean;
   min?: string;
   wide?: boolean;
+  value?: string;
+  defaultValue?: string;
+  disabled?: boolean;
+  onChange?: (value: string) => void;
 }) {
   return (
     <label className={wide ? "sm:col-span-2" : undefined}>
@@ -2333,6 +3372,12 @@ function Field({
         className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 outline-none focus:border-teal"
         min={min}
         name={name}
+        defaultValue={defaultValue}
+        disabled={disabled}
+        value={value}
+        onChange={
+          onChange ? (event) => onChange(event.target.value) : undefined
+        }
         required={required}
         type={type}
       />
@@ -2350,6 +3395,40 @@ function SubmitButton({ busy }: { busy: boolean }) {
       <Check aria-hidden="true" className="h-4 w-4" />
       {busy ? "儲存中..." : "儲存"}
     </button>
+  );
+}
+
+function MediaUploadButton({
+  busy,
+  label,
+  onFile,
+}: {
+  busy: boolean;
+  label: string;
+  onFile: (file: File) => void;
+}) {
+  return (
+    <label
+      className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700 transition hover:border-teal hover:text-teal ${
+        busy ? "pointer-events-none opacity-50" : ""
+      }`}
+    >
+      <ImagePlus aria-hidden="true" className="h-4 w-4" />
+      {label}
+      <input
+        accept="image/jpeg,image/png,image/webp"
+        className="sr-only"
+        disabled={busy}
+        type="file"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) {
+            onFile(file);
+          }
+          event.currentTarget.value = "";
+        }}
+      />
+    </label>
   );
 }
 

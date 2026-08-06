@@ -6,9 +6,12 @@ import {
 } from "@/server/auth/session";
 import { jsonError, jsonSuccess } from "@/server/http/response";
 import { resolveMerchantContext } from "@/server/merchant/context";
-import { updateMerchantLocationState } from "@/server/merchant/management";
 import {
-  merchantLocationStateSchema,
+  updateMerchantLocationProfile,
+  updateMerchantLocationState,
+} from "@/server/merchant/management";
+import {
+  merchantLocationUpdateSchema,
   merchantScopeSchema,
 } from "@/server/merchant/schemas";
 import { getRequestId } from "@/server/security/request";
@@ -27,13 +30,27 @@ export async function PATCH(request: NextRequest) {
       organizationSlug: scope.organization,
       locationSlug: scope.location,
     });
-    const input = merchantLocationStateSchema.parse(
+    const input = merchantLocationUpdateSchema.parse(
       await request.json(),
     );
+    if (input.action === "PROFILE") {
+      return jsonSuccess(
+        await updateMerchantLocationProfile({
+          context,
+          name: input.name,
+          description: input.description,
+          address: input.address,
+          phone: input.phone,
+          requestId,
+        }),
+        { headers: { "x-request-id": requestId } },
+      );
+    }
     return jsonSuccess(
       await updateMerchantLocationState({
         context,
-        ...input,
+        bookingState: input.bookingState,
+        onlineBookingEnabled: input.onlineBookingEnabled,
         requestId,
       }),
       { headers: { "x-request-id": requestId } },

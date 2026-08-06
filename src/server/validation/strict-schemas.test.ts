@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { adminBillingActionSchema } from "../admin/billing-schemas";
 import { organizationFeatureOverrideSchema } from "../admin/feature-schemas";
-import { createMerchantServiceSchema } from "../merchant/schemas";
+import {
+  createMerchantServiceSchema,
+  merchantDayScheduleSchema,
+  updateMerchantCustomerSchema,
+} from "../merchant/schemas";
 import {
   adminMerchantApplicationReviewSchema,
   merchantApplicationFormSchema,
@@ -92,6 +96,47 @@ describe("strict API schemas", () => {
         invoiceId: "00000000-0000-4000-8000-000000000001",
         amountMinor: -1,
         reference: "TEST-001",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts split opening hours and rejects overlapping segments", () => {
+    expect(
+      merchantDayScheduleSchema.safeParse({
+        date: "2026-08-08",
+        mode: "CUSTOM",
+        reason: "午間休息",
+        segments: [
+          { startsAt: "09:00", endsAt: "12:00" },
+          { startsAt: "13:00", endsAt: "18:00" },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      merchantDayScheduleSchema.safeParse({
+        date: "2026-08-08",
+        mode: "CUSTOM",
+        segments: [
+          { startsAt: "09:00", endsAt: "13:30" },
+          { startsAt: "13:00", endsAt: "18:00" },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires a blacklist reason and rejects tenant scope", () => {
+    expect(
+      updateMerchantCustomerSchema.safeParse({
+        customerId: "00000000-0000-4000-8000-000000000001",
+        isBlacklisted: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      updateMerchantCustomerSchema.safeParse({
+        customerId: "00000000-0000-4000-8000-000000000001",
+        isBlacklisted: true,
+        blacklistReason: "多次爽約",
+        organizationId: "attacker-controlled",
       }).success,
     ).toBe(false);
   });

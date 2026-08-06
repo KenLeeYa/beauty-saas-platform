@@ -6,9 +6,12 @@ import {
 } from "../authorization/capabilities";
 import type { OrganizationContext } from "../authorization/context";
 import { prisma } from "../database/prisma";
+import { getEntitlement } from "../entitlements/service";
 import { requireLocation } from "../authorization/context";
+import { publicMediaUrl } from "../storage/provider";
 import {
   addLocalDays,
+  databaseTimeToString,
   formatDateInTimeZone,
   zonedDateTimeToUtc,
 } from "../time/timezone";
@@ -23,6 +26,13 @@ export type MerchantWorkspaceData = {
     name: string;
     slug: string;
     status: string;
+    businessName: string;
+    entityType: string;
+    email: string;
+    phone: string;
+    brandDescription: string;
+    logoUrl: string | null;
+    coverImageUrl: string | null;
   };
   location: {
     id: string;
@@ -31,6 +41,20 @@ export type MerchantWorkspaceData = {
     timezone: string;
     bookingState: string;
     onlineBookingEnabled: boolean;
+    description: string;
+    address: string;
+    phone: string;
+    coverImageUrl: string | null;
+  };
+  features: {
+    deposits: boolean;
+    customerBlacklist: boolean;
+  };
+  bookingSettings: {
+    depositsEnabled: boolean;
+    depositMode: "FIXED" | "PERCENTAGE";
+    depositAmountMinor: number;
+    depositPercentage: number;
   };
   capabilities: string[];
   stats: {
@@ -45,6 +69,16 @@ export type MerchantWorkspaceData = {
     availableCount: number;
     bookedCount: number;
     closedCount: number;
+    scheduleMode: "NORMAL" | "CUSTOM" | "CLOSED";
+    scheduleReason: string;
+    scheduleSegments: Array<{
+      startsAt: string;
+      endsAt: string;
+    }>;
+    defaultScheduleSegments: Array<{
+      startsAt: string;
+      endsAt: string;
+    }>;
   }>;
   bookings: Array<{
     id: string;
@@ -73,6 +107,8 @@ export type MerchantWorkspaceData = {
     priceMinor: number;
     onlineBookingEnabled: boolean;
     staffCount: number;
+    categoryName: string | null;
+    imageUrl: string | null;
   }>;
   staff: Array<{
     id: string;
@@ -80,6 +116,7 @@ export type MerchantWorkspaceData = {
     title: string;
     skills: string[];
     isActive: boolean;
+    photoUrl: string | null;
   }>;
   resources: Array<{
     id: string;
@@ -92,8 +129,14 @@ export type MerchantWorkspaceData = {
     id: string;
     displayName: string;
     phone: string | null;
+    birthday: string | null;
+    depositMode: "DEFAULT" | "REQUIRED" | "EXEMPT";
+    isBlacklisted: boolean;
+    blacklistReason: string | null;
     lastServiceAt: string | null;
     completedCount: number;
+    cancelledCount: number;
+    noShowCount: number;
     totalSpendMinor: string;
   }>;
   locations: Array<{
@@ -103,6 +146,10 @@ export type MerchantWorkspaceData = {
     code: string;
     bookingState: string;
     onlineBookingEnabled: boolean;
+    description: string;
+    address: string;
+    phone: string;
+    coverImageUrl: string | null;
   }>;
   subscription: {
     status: string;
@@ -219,6 +266,8 @@ export async function getMerchantWorkspaceData(
     notificationIntegrationRecords,
     invoiceRecords,
     notificationDeliveryRecords,
+    depositEntitlement,
+    blacklistEntitlement,
   ] = await Promise.all([
     prisma.locations.findUniqueOrThrow({
       where: { id: location.id },
@@ -226,10 +275,52 @@ export async function getMerchantWorkspaceData(
         booking_state: true,
         online_booking_enabled: true,
         currency: true,
+        description: true,
+        address: true,
+        phone: true,
+        cover_image_path: true,
+        location_booking_policies: {
+          select: {
+            deposits_enabled: true,
+          },
+        },
+        deposit_policies: {
+          where: {
+            service_variant_id: null,
+            is_active: true,
+          },
+          take: 1,
+          select: {
+            mode: true,
+            fixed_amount_minor: true,
+            percentage: true,
+          },
+        },
         location_business_hours: {
           select: {
             day_of_week: true,
+            opens_at: true,
+            closes_at: true,
             is_closed: true,
+          },
+        },
+        location_day_schedules: {
+          where: {
+            schedule_date: {
+              gte: new Date(`${rangeStartDate}T00:00:00.000Z`),
+              lt: new Date(`${rangeEndDate}T00:00:00.000Z`),
+            },
+          },
+          orderBy: [
+            { schedule_date: "asc" },
+            { segment_index: "asc" },
+          ],
+          select: {
+            schedule_date: true,
+            opens_at: true,
+            closes_at: true,
+            is_closed: true,
+            reason: true,
           },
         },
       },
@@ -320,6 +411,12 @@ export async function getMerchantWorkspaceData(
               select: {
                 id: true,
                 name: true,
+                image_path: true,
+                service_categories: {
+                  select: {
+                    name: true,
+                  },
+                },
               },
             },
             service_variants: {
@@ -360,6 +457,7 @@ export async function getMerchantWorkspaceData(
             title: true,
             skills: true,
             is_active: true,
+            photo_path: true,
           },
         })
       : Promise.resolve([]),
@@ -398,6 +496,10 @@ export async function getMerchantWorkspaceData(
           select: {
             id: true,
             display_name: true,
+            birthday: true,
+            deposit_mode: true,
+            is_blacklisted: true,
+            blacklist_reason: true,
             customer_contacts: {
               where: {
                 contact_type: "PHONE",
@@ -412,6 +514,8 @@ export async function getMerchantWorkspaceData(
               select: {
                 last_service_at: true,
                 completed_count: true,
+                cancelled_count: true,
+                no_show_count: true,
                 total_spend_minor: true,
               },
             },
@@ -436,6 +540,10 @@ export async function getMerchantWorkspaceData(
         code: true,
         booking_state: true,
         online_booking_enabled: true,
+        description: true,
+        address: true,
+        phone: true,
+        cover_image_path: true,
       },
     }),
     prisma.organizations.findUniqueOrThrow({
@@ -443,6 +551,13 @@ export async function getMerchantWorkspaceData(
         id: context.organization.id,
       },
       select: {
+        business_name: true,
+        entity_type: true,
+        email: true,
+        phone: true,
+        brand_description: true,
+        brand_logo_path: true,
+        brand_cover_image_path: true,
         subscriptions: {
           where: {
             is_current: true,
@@ -549,6 +664,8 @@ export async function getMerchantWorkspaceData(
           },
         })
       : Promise.resolve([]),
+    getEntitlement(context.organization.id, "DEPOSITS"),
+    getEntitlement(context.organization.id, "CUSTOMER_BLACKLIST"),
   ]);
 
   const bookings = bookingRecords.flatMap((booking) => {
@@ -596,15 +713,61 @@ export async function getMerchantWorkspaceData(
       .filter((hours) => !hours.is_closed)
       .map((hours) => hours.day_of_week),
   );
+  const daySchedulesByDate = new Map<
+    string,
+    typeof locationRecord.location_day_schedules
+  >();
+  for (const schedule of locationRecord.location_day_schedules) {
+    const date = schedule.schedule_date.toISOString().slice(0, 10);
+    const schedules = daySchedulesByDate.get(date) ?? [];
+    schedules.push(schedule);
+    daySchedulesByDate.set(date, schedules);
+  }
   const calendarDays = Array.from({ length: 130 }, (_, index) => {
     const date = addLocalDays(rangeStartDate, index);
     const dayOfWeek = new Date(`${date}T12:00:00.000Z`).getUTCDay();
-    const open = openDayOfWeek.has(dayOfWeek);
+    const schedules = daySchedulesByDate.get(date);
+    const closed = schedules?.some((schedule) => schedule.is_closed) ?? false;
+    const customSegments =
+      schedules?.flatMap((schedule) =>
+        !schedule.is_closed && schedule.opens_at && schedule.closes_at
+          ? [
+              {
+                startsAt: databaseTimeToString(schedule.opens_at),
+                endsAt: databaseTimeToString(schedule.closes_at),
+              },
+            ]
+          : [],
+      ) ?? [];
+    const weeklySegments = locationRecord.location_business_hours.flatMap(
+      (hours) =>
+        hours.day_of_week === dayOfWeek && !hours.is_closed
+          ? [
+              {
+                startsAt: databaseTimeToString(hours.opens_at),
+                endsAt: databaseTimeToString(hours.closes_at),
+              },
+            ]
+          : [],
+    );
+    const scheduleMode: MerchantWorkspaceData["calendarDays"][number]["scheduleMode"] = closed
+      ? "CLOSED"
+      : customSegments.length > 0
+        ? "CUSTOM"
+        : "NORMAL";
+    const open =
+      scheduleMode === "CUSTOM" ||
+      (scheduleMode === "NORMAL" && openDayOfWeek.has(dayOfWeek));
     return {
       date,
       availableCount: open ? 1 : 0,
       bookedCount: bookingCountsByDate.get(date) ?? 0,
       closedCount: open ? 0 : 1,
+      scheduleMode,
+      scheduleReason: schedules?.[0]?.reason ?? "",
+      scheduleSegments:
+        scheduleMode === "CUSTOM" ? customSegments : weeklySegments,
+      defaultScheduleSegments: weeklySegments,
     };
   });
   const localMonthBookings = bookings.filter((booking) => {
@@ -632,7 +795,18 @@ export async function getMerchantWorkspaceData(
       displayName: context.session.displayName,
       email: context.session.email,
     },
-    organization: context.organization,
+    organization: {
+      ...context.organization,
+      businessName: organizationRecord.business_name,
+      entityType: organizationRecord.entity_type,
+      email: organizationRecord.email,
+      phone: organizationRecord.phone,
+      brandDescription: organizationRecord.brand_description,
+      logoUrl: publicMediaUrl(organizationRecord.brand_logo_path),
+      coverImageUrl: publicMediaUrl(
+        organizationRecord.brand_cover_image_path,
+      ),
+    },
     location: {
       id: location.id,
       name: location.name,
@@ -641,6 +815,28 @@ export async function getMerchantWorkspaceData(
       bookingState: locationRecord.booking_state,
       onlineBookingEnabled:
         locationRecord.online_booking_enabled,
+      description: locationRecord.description,
+      address: locationRecord.address,
+      phone: locationRecord.phone,
+      coverImageUrl: publicMediaUrl(locationRecord.cover_image_path),
+    },
+    features: {
+      deposits: depositEntitlement.enabled,
+      customerBlacklist: blacklistEntitlement.enabled,
+    },
+    bookingSettings: {
+      depositsEnabled:
+        locationRecord.location_booking_policies?.deposits_enabled ??
+        false,
+      depositMode:
+        locationRecord.deposit_policies[0]?.mode === "PERCENTAGE"
+          ? "PERCENTAGE"
+          : "FIXED",
+      depositAmountMinor:
+        locationRecord.deposit_policies[0]?.fixed_amount_minor ?? 50000,
+      depositPercentage: Number(
+        locationRecord.deposit_policies[0]?.percentage ?? 30,
+      ),
     },
     capabilities: [
       ...capabilitiesForRoles(context.roles),
@@ -681,6 +877,8 @@ export async function getMerchantWorkspaceData(
         service.service_variants.price_minor,
       onlineBookingEnabled: service.online_booking_enabled,
       staffCount: service.service_staff_assignments.length,
+      categoryName: service.services.service_categories?.name ?? null,
+      imageUrl: publicMediaUrl(service.services.image_path),
     })),
     staff: staffRecords.map((staff) => ({
       id: staff.id,
@@ -688,6 +886,7 @@ export async function getMerchantWorkspaceData(
       title: staff.title,
       skills: staff.skills,
       isActive: staff.is_active,
+      photoUrl: publicMediaUrl(staff.photo_path),
     })),
     resources: resourceRecords.map((resource) => ({
       id: resource.id,
@@ -700,11 +899,18 @@ export async function getMerchantWorkspaceData(
       id: customer.id,
       displayName: customer.display_name,
       phone: customer.customer_contacts[0]?.value ?? null,
+      birthday: customer.birthday?.toISOString().slice(0, 10) ?? null,
+      depositMode: customer.deposit_mode,
+      isBlacklisted: customer.is_blacklisted,
+      blacklistReason: customer.blacklist_reason,
       lastServiceAt:
         customer.customer_metrics?.last_service_at?.toISOString() ??
         null,
       completedCount:
         customer.customer_metrics?.completed_count ?? 0,
+      cancelledCount:
+        customer.customer_metrics?.cancelled_count ?? 0,
+      noShowCount: customer.customer_metrics?.no_show_count ?? 0,
       totalSpendMinor:
         customer.customer_metrics?.total_spend_minor.toString() ??
         "0",
@@ -716,6 +922,10 @@ export async function getMerchantWorkspaceData(
       code: item.code,
       bookingState: item.booking_state,
       onlineBookingEnabled: item.online_booking_enabled,
+      description: item.description,
+      address: item.address,
+      phone: item.phone,
+      coverImageUrl: publicMediaUrl(item.cover_image_path),
     })),
     subscription: subscription
       ? {

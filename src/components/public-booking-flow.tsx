@@ -10,8 +10,9 @@ import {
   Sparkles,
   UserRound,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import Image, { type ImageLoaderProps } from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import {
@@ -46,6 +47,10 @@ function formatMoney(amountMinor: number, currency: string): string {
     currency,
     maximumFractionDigits: 0,
   }).format(amountMinor / 100);
+}
+
+function publicMediaLoader({ src }: ImageLoaderProps): string {
+  return src;
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -86,10 +91,25 @@ export function PublicBookingFlow({
           description: service.description,
           bookingNotice: service.bookingNotice,
           categoryName: service.categoryName,
+          imageUrl: service.imageUrl,
         })),
       ),
     [catalog.services],
   );
+  const variantGroups = useMemo(() => {
+    const groups = new Map<string, typeof variants>();
+    for (const variant of variants) {
+      const categoryName = variant.categoryName ?? "一般服務";
+      groups.set(categoryName, [
+        ...(groups.get(categoryName) ?? []),
+        variant,
+      ]);
+    }
+    return [...groups.entries()].map(([categoryName, items]) => ({
+      categoryName,
+      items,
+    }));
+  }, [variants]);
   const initialVariant =
     variants.find((variant) => variant.id === lockedVariantId) ??
     variants[0];
@@ -376,14 +396,27 @@ export function PublicBookingFlow({
     <div className="min-h-screen bg-mist">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-          <div className="min-w-0">
-            <p className="truncate text-lg font-semibold text-ink">
-              {catalog.organization.name}
-            </p>
-            <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
-              <MapPin aria-hidden="true" className="h-3.5 w-3.5" />
-              {catalog.location.name}
-            </p>
+          <div className="flex min-w-0 items-center gap-3">
+            {catalog.organization.logoUrl ? (
+              <Image
+                alt={`${catalog.organization.name} Logo`}
+                className="h-11 w-11 shrink-0 rounded-md object-cover"
+                height={44}
+                loader={publicMediaLoader}
+                src={catalog.organization.logoUrl}
+                unoptimized
+                width={44}
+              />
+            ) : null}
+            <div className="min-w-0">
+              <p className="truncate text-lg font-semibold text-ink">
+                {catalog.organization.name}
+              </p>
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+                <MapPin aria-hidden="true" className="h-3.5 w-3.5" />
+                {catalog.location.name}
+              </p>
+            </div>
           </div>
           {authenticated ? (
             <LogoutButton />
@@ -397,6 +430,32 @@ export function PublicBookingFlow({
           )}
         </div>
       </header>
+
+      {catalog.location.coverImageUrl ||
+      catalog.organization.coverImageUrl ? (
+        <section className="border-b border-slate-200 bg-white">
+          <div className="mx-auto max-w-6xl sm:px-6">
+            <Image
+              alt={`${catalog.location.name} 店面`}
+              className="aspect-[21/7] w-full object-cover sm:rounded-b-md"
+              height={400}
+              loader={publicMediaLoader}
+              src={
+                catalog.location.coverImageUrl ??
+                catalog.organization.coverImageUrl ??
+                ""
+              }
+              unoptimized
+              width={1200}
+            />
+            {catalog.location.description || catalog.organization.description ? (
+              <p className="px-4 py-4 text-sm leading-6 text-slate-600 sm:px-0">
+                {catalog.location.description || catalog.organization.description}
+              </p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <main
         id="main-content"
@@ -424,49 +483,74 @@ export function PublicBookingFlow({
             </div>
 
             {!rescheduleTrackingToken ? (
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                {variants.map((variant) => {
-                  const selected = variant.id === selectedVariantId;
-                  return (
-                    <button
-                      key={variant.id}
-                      className={`min-h-36 rounded-md border p-4 text-left transition ${
-                        selected
-                          ? "border-teal bg-teal/5 ring-2 ring-teal/15"
-                          : "border-slate-200 bg-white hover:border-teal/60"
-                      }`}
-                      disabled={isLoading}
-                      type="button"
-                      onClick={() => void selectVariant(variant.id)}
-                    >
-                      <span className="flex items-start justify-between gap-3">
-                        <span>
-                          <span className="block text-base font-semibold text-ink">
-                            {variant.serviceName}
-                          </span>
-                          <span className="mt-1 block text-sm text-slate-500">
-                            {variant.name} · {variant.durationMinutes} 分鐘
-                          </span>
-                        </span>
-                        {selected ? (
-                          <Check
-                            aria-hidden="true"
-                            className="h-5 w-5 shrink-0 text-teal"
-                          />
-                        ) : null}
-                      </span>
-                      <span className="mt-4 block text-sm leading-6 text-slate-600">
-                        {variant.description}
-                      </span>
-                      <span className="mt-3 block text-base font-semibold text-ink">
-                        {formatMoney(
-                          variant.priceMinor,
-                          catalog.location.currency,
-                        )}
-                      </span>
-                    </button>
-                  );
-                })}
+              <div className="mt-5 space-y-7">
+                {variantGroups.map((group) => (
+                  <section
+                    aria-label={`${group.categoryName}服務項目`}
+                    key={group.categoryName}
+                  >
+                    <h2 className="mb-3 text-sm font-semibold text-slate-600">
+                      {group.categoryName}
+                    </h2>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {group.items.map((variant) => {
+                        const selected = variant.id === selectedVariantId;
+                        return (
+                          <button
+                            key={variant.id}
+                            className={`overflow-hidden rounded-md border text-left transition ${
+                              selected
+                                ? "border-teal bg-teal/5 ring-2 ring-teal/15"
+                                : "border-slate-200 bg-white hover:border-teal/60"
+                            }`}
+                            disabled={isLoading}
+                            type="button"
+                            onClick={() => void selectVariant(variant.id)}
+                          >
+                            {variant.imageUrl ? (
+                              <Image
+                                alt={`${variant.serviceName} 服務圖片`}
+                                className="aspect-[16/7] w-full object-cover"
+                                height={280}
+                                loader={publicMediaLoader}
+                                src={variant.imageUrl}
+                                unoptimized
+                                width={640}
+                              />
+                            ) : null}
+                            <span className="block min-h-36 p-4">
+                              <span className="flex items-start justify-between gap-3">
+                                <span>
+                                  <span className="block text-base font-semibold text-ink">
+                                    {variant.serviceName}
+                                  </span>
+                                  <span className="mt-1 block text-sm text-slate-500">
+                                    {variant.name} · {variant.durationMinutes} 分鐘
+                                  </span>
+                                </span>
+                                {selected ? (
+                                  <Check
+                                    aria-hidden="true"
+                                    className="h-5 w-5 shrink-0 text-teal"
+                                  />
+                                ) : null}
+                              </span>
+                              <span className="mt-4 block text-sm leading-6 text-slate-600">
+                                {variant.description}
+                              </span>
+                              <span className="mt-3 block text-base font-semibold text-ink">
+                                {formatMoney(
+                                  variant.priceMinor,
+                                  catalog.location.currency,
+                                )}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
               </div>
             ) : (
               <div className="mt-5 border-l-4 border-teal bg-white px-4 py-4">
@@ -515,7 +599,7 @@ export function PublicBookingFlow({
                 {selectedVariant.staff.map((staff) => (
                   <button
                     key={staff.id}
-                    className={`min-h-11 rounded-md border px-4 text-sm font-medium ${
+                    className={`flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm font-medium ${
                       selectedStaffId === staff.id
                         ? "border-ink bg-ink text-white"
                         : "border-slate-300 bg-white text-slate-700"
@@ -524,6 +608,17 @@ export function PublicBookingFlow({
                     type="button"
                     onClick={() => void selectStaff(staff.id)}
                   >
+                    {staff.photoUrl ? (
+                      <Image
+                        alt=""
+                        className="h-8 w-8 rounded-md object-cover"
+                        height={32}
+                        loader={publicMediaLoader}
+                        src={staff.photoUrl}
+                        unoptimized
+                        width={32}
+                      />
+                    ) : null}
                     {staff.displayName}
                   </button>
                 ))}

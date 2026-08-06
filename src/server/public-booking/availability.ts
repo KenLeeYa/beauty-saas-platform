@@ -197,6 +197,19 @@ export async function getPublicAvailability(
           closes_at: true,
         },
       },
+      location_day_schedules: {
+        where: {
+          schedule_date: dateValue,
+        },
+        orderBy: {
+          segment_index: "asc",
+        },
+        select: {
+          opens_at: true,
+          closes_at: true,
+          is_closed: true,
+        },
+      },
       location_services: {
         where: {
           service_variant_id: input.serviceVariantId,
@@ -431,10 +444,30 @@ export async function getPublicAvailability(
     );
   }
 
-  const businessHours = location.location_business_hours.map((hours) => ({
-    opensAt: databaseTimeToString(hours.opens_at),
-    closesAt: databaseTimeToString(hours.closes_at),
-  }));
+  const hasDaySchedule = location.location_day_schedules.length > 0;
+  const dayClosed = location.location_day_schedules.some(
+    (schedule) => schedule.is_closed,
+  );
+  const customBusinessHours = location.location_day_schedules.flatMap(
+    (schedule) =>
+      !schedule.is_closed && schedule.opens_at && schedule.closes_at
+        ? [
+            {
+              opensAt: databaseTimeToString(schedule.opens_at),
+              closesAt: databaseTimeToString(schedule.closes_at),
+            },
+          ]
+        : [],
+  );
+  const businessHours = hasDaySchedule
+    ? dayClosed
+      ? []
+      : customBusinessHours
+    : location.location_business_hours.map((hours) => ({
+        opensAt: databaseTimeToString(hours.opens_at),
+        closesAt: databaseTimeToString(hours.closes_at),
+      }));
+  const hasCustomSchedule = hasDaySchedule && !dayClosed;
   const variant = locationService.service_variants;
   const durationMinutes =
     locationService.duration_override_minutes ?? variant.duration_minutes;
@@ -452,10 +485,12 @@ export async function getPublicAvailability(
     (resource) => ({
       id: resource.id,
       resourceTypeId: resource.resource_type_id,
-      rules: resource.resource_availability_rules.map((rule) => ({
-        opensAt: databaseTimeToString(rule.starts_at),
-        closesAt: databaseTimeToString(rule.ends_at),
-      })),
+      rules: hasCustomSchedule
+        ? businessHours
+        : resource.resource_availability_rules.map((rule) => ({
+            opensAt: databaseTimeToString(rule.starts_at),
+            closesAt: databaseTimeToString(rule.ends_at),
+          })),
       busy: [
         ...resource.resource_time_off.map((timeOff) => ({
           startsAt: timeOff.starts_at,
@@ -498,7 +533,11 @@ export async function getPublicAvailability(
         closesAt: databaseTimeToString(exception.ends_at as Date),
       }));
     const staffHours =
-      availableExceptions.length > 0 ? availableExceptions : weeklyHours;
+      availableExceptions.length > 0
+        ? availableExceptions
+        : hasCustomSchedule
+          ? businessHours
+          : weeklyHours;
     const workingWindows = intersectLocalIntervals(
       businessHours,
       staffHours,

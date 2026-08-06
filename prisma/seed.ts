@@ -425,6 +425,33 @@ async function seedSubscription(
       last_step = excluded.last_step,
       updated_at = now()
   `;
+
+  await transaction.$executeRaw`
+    insert into public.organization_feature_overrides (
+      id,
+      organization_id,
+      feature_key,
+      override_type,
+      reason,
+      created_by
+    )
+    values (
+      '99999999-9999-4999-8999-999999999902'::uuid,
+      ${ids.organization}::uuid,
+      'CUSTOMER_BLACKLIST'::public.feature_key,
+      'ALLOW',
+      '本機示範租戶啟用黑名單加值功能',
+      ${ids.profiles.platformAdmin}::uuid
+    )
+    on conflict (id) do update
+    set
+      override_type = 'ALLOW',
+      reason = excluded.reason,
+      effective_at = now(),
+      expires_at = null,
+      revoked_at = null,
+      revoked_by = null
+  `;
 }
 
 async function seedCatalog(
@@ -898,7 +925,8 @@ async function seedPolicies(
       customer_cancellation_enabled,
       customer_reschedule_enabled,
       cancellation_cutoff_hours,
-      reminder_hours
+      reminder_hours,
+      deposits_enabled
     )
     values (
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'::uuid,
@@ -911,7 +939,8 @@ async function seedPolicies(
       true,
       true,
       24,
-      '{24,3}'
+      '{24,3}',
+      true
     )
     on conflict (location_id) do update
     set
@@ -923,6 +952,7 @@ async function seedPolicies(
       customer_reschedule_enabled = true,
       cancellation_cutoff_hours = excluded.cancellation_cutoff_hours,
       reminder_hours = excluded.reminder_hours,
+      deposits_enabled = true,
       updated_at = now()
   `;
 
