@@ -55,10 +55,10 @@ export function MonthCalendar({
 
   return (
     <section aria-label="月曆" className="min-w-0">
-      <div className="flex h-12 items-center justify-between border-b border-slate-200 px-1">
+      <div className="flex h-11 items-center justify-between border-b border-slate-200 px-1 sm:h-12">
         <button
           aria-label="上一個月"
-          className="flex h-9 w-9 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
+          className="flex h-11 w-11 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-ink disabled:cursor-not-allowed disabled:opacity-30 sm:h-9 sm:w-9"
           disabled={!canGoPrevious}
           title="上一個月"
           type="button"
@@ -69,7 +69,7 @@ export function MonthCalendar({
         <h2 className="text-base font-semibold text-ink">{format(visibleMonth, "yyyy 年 M 月")}</h2>
         <button
           aria-label="下一個月"
-          className="flex h-9 w-9 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
+          className="flex h-11 w-11 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-ink disabled:cursor-not-allowed disabled:opacity-30 sm:h-9 sm:w-9"
           disabled={!canGoNext}
           title="下一個月"
           type="button"
@@ -81,7 +81,7 @@ export function MonthCalendar({
 
       <div className="grid grid-cols-7 border-b border-slate-200">
         {weekdayLabels.map((label) => (
-          <div key={label} className="flex h-9 items-center justify-center text-xs font-semibold text-slate-400">
+          <div key={label} className="flex h-8 items-center justify-center text-xs font-semibold text-slate-400 sm:h-9">
             {label}
           </div>
         ))}
@@ -109,7 +109,7 @@ export function MonthCalendar({
             <button
               key={dateKey}
               aria-label={`${format(date, "M 月 d 日")}${statusLabel ? `，${statusLabel}` : ""}`}
-              className={`relative flex min-h-16 flex-col border-b border-r border-slate-200 p-1.5 text-left transition sm:aspect-square sm:min-h-20 sm:p-2 ${
+              className={`relative flex min-h-12 flex-col border-b border-r border-slate-200 p-1 text-left transition sm:aspect-square sm:min-h-20 sm:p-2 ${
                 isSelected
                   ? "bg-ink text-white"
                   : day && isCurrentMonth
@@ -120,16 +120,16 @@ export function MonthCalendar({
               type="button"
               onClick={() => onSelectDate(dateKey)}
             >
-              <span className="text-xs font-semibold sm:text-sm">{format(date, "d")}</span>
+              <span className="text-[11px] font-semibold sm:text-sm">{format(date, "d")}</span>
               {day && isCurrentMonth ? (
-                <span className={`mt-auto text-[10px] font-medium sm:text-xs ${isSelected ? "text-white/80" : isBookable ? "text-teal" : "text-slate-400"}`}>
+                <span className={`mt-auto text-[9px] font-medium leading-3 sm:text-xs ${isSelected ? "text-white/80" : isBookable ? "text-teal" : "text-slate-400"}`}>
                   {statusLabel}
                 </span>
               ) : null}
               {audience === "merchant" && day && day.availableCount > 0 ? (
                 <span
                   aria-hidden="true"
-                  className={`absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ${isSelected ? "bg-white" : "bg-emerald-500"}`}
+                  className={`absolute right-1 top-1 h-1.5 w-1.5 rounded-full sm:right-1.5 sm:top-1.5 ${isSelected ? "bg-white" : "bg-emerald-500"}`}
                 />
               ) : null}
             </button>

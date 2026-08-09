@@ -42,6 +42,8 @@ export const createMerchantServiceSchema = z.object({
   description: z.string().trim().max(1_000).default(""),
   durationMinutes: z.int().min(15).max(720),
   priceMinor: z.int().min(0).max(100_000_000),
+  preBufferMinutes: z.int().min(0).max(240).default(0),
+  postBufferMinutes: z.int().min(0).max(240).default(0),
 }).strict();
 
 export const createMerchantStaffSchema = z.object({
@@ -109,6 +111,18 @@ export const merchantServiceToggleSchema = z.object({
   locationServiceId: z.uuid(),
   onlineBookingEnabled: z.boolean(),
 }).strict();
+
+export const merchantServiceBufferSchema = z.object({
+  action: z.literal("UPDATE_BUFFERS"),
+  locationServiceId: z.uuid(),
+  preBufferMinutes: z.int().min(0).max(240),
+  postBufferMinutes: z.int().min(0).max(240),
+}).strict();
+
+export const merchantServiceUpdateSchema = z.union([
+  merchantServiceToggleSchema,
+  merchantServiceBufferSchema,
+]);
 
 export const merchantLocationUpdateSchema = z.discriminatedUnion(
   "action",
@@ -187,6 +201,9 @@ export const merchantBookingSettingsSchema = z
     depositMode: z.enum(["FIXED", "PERCENTAGE"]),
     depositAmountMinor: z.int().min(0).max(100_000_000),
     depositPercentage: z.number().min(0).max(100),
+    customerCancellationEnabled: z.boolean(),
+    customerRescheduleEnabled: z.boolean(),
+    cancellationCutoffHours: z.int().min(0).max(720),
   })
   .strict()
   .superRefine((value, context) => {

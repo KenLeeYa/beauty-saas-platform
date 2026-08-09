@@ -5,6 +5,10 @@ import { useMemo, useState } from "react";
 
 import { LogoutButton } from "./logout-button";
 import { MonthCalendar } from "./month-calendar";
+import {
+  formatLocalDateKey,
+  formatLocalTime,
+} from "@/lib/presentation/date-time";
 import type { StaffWorkspaceData } from "@/server/staff/data";
 
 type ApiEnvelope = {
@@ -37,24 +41,6 @@ function csrfToken(): string {
   return match ? decodeURIComponent(match.split("=").slice(1).join("=")) : "";
 }
 
-function localDate(value: Date, timezone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(value);
-}
-
-function localTime(value: string, timezone: string): string {
-  return new Intl.DateTimeFormat("zh-TW", {
-    timeZone: timezone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(value));
-}
-
 export function StaffWorkspace({
   initialData,
 }: {
@@ -62,7 +48,7 @@ export function StaffWorkspace({
 }) {
   const [data, setData] = useState(initialData);
   const [selectedDate, setSelectedDate] = useState(() =>
-    localDate(new Date(), data.location.timezone),
+    formatLocalDateKey(new Date(), data.location.timezone),
   );
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +57,7 @@ export function StaffWorkspace({
       data.bookings
         .filter(
           (booking) =>
-            localDate(
+            formatLocalDateKey(
               new Date(booking.startsAt),
               data.location.timezone,
             ) === selectedDate,
@@ -157,8 +143,8 @@ export function StaffWorkspace({
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-        <section className="min-w-0">
+      <div className="mx-auto grid max-w-6xl gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)] lg:gap-6 lg:py-6">
+        <section className="order-2 min-w-0 lg:order-1">
           <div className="mb-3 flex items-center gap-2">
             <CalendarDays
               aria-hidden="true"
@@ -174,7 +160,7 @@ export function StaffWorkspace({
           />
         </section>
 
-        <section className="min-w-0">
+        <section className="order-1 min-w-0 lg:order-2">
           <div className="mb-3">
             <h2 className="text-lg font-semibold text-ink">
               {selectedDate} 預約
@@ -195,12 +181,12 @@ export function StaffWorkspace({
             {dayBookings.map((booking) => (
               <article
                 key={booking.id}
-                className="rounded-md border border-slate-200 bg-white p-4"
+                className="rounded-md border border-slate-200 bg-white p-3 sm:p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-base font-semibold text-ink">
-                      {localTime(
+                        {formatLocalTime(
                         booking.startsAt,
                         data.location.timezone,
                       )}{" "}
@@ -218,7 +204,7 @@ export function StaffWorkspace({
                   {booking.status === "CONFIRMED" ? (
                     <>
                       <button
-                        className="flex h-9 items-center gap-2 rounded-md bg-teal px-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-60"
+                        className="flex h-11 items-center gap-2 rounded-md bg-teal px-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-60 sm:h-9"
                         disabled={pendingId === booking.id}
                         type="button"
                         onClick={() =>
@@ -232,7 +218,7 @@ export function StaffWorkspace({
                         報到
                       </button>
                       <button
-                        className="h-9 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 disabled:cursor-wait disabled:opacity-60"
+                        className="h-11 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 disabled:cursor-wait disabled:opacity-60 sm:h-9"
                         disabled={pendingId === booking.id}
                         type="button"
                         onClick={() =>
@@ -245,7 +231,7 @@ export function StaffWorkspace({
                   ) : null}
                   {booking.status === "CHECKED_IN" ? (
                     <button
-                      className="flex h-9 items-center gap-2 rounded-md bg-coral px-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-60"
+                      className="flex h-11 items-center gap-2 rounded-md bg-coral px-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-60 sm:h-9"
                       disabled={pendingId === booking.id}
                       type="button"
                       onClick={() =>
@@ -258,7 +244,7 @@ export function StaffWorkspace({
                   ) : null}
                   {booking.status === "IN_SERVICE" ? (
                     <button
-                      className="flex h-9 items-center gap-2 rounded-md bg-ink px-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-60"
+                      className="flex h-11 items-center gap-2 rounded-md bg-ink px-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-60 sm:h-9"
                       disabled={pendingId === booking.id}
                       type="button"
                       onClick={() =>

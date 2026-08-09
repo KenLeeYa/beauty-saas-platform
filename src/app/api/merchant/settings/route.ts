@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 
 import {
   assertSessionCsrf,
@@ -30,12 +31,14 @@ export async function PATCH(request: NextRequest) {
     const input = merchantBookingSettingsSchema.parse(
       await request.json(),
     );
+    const result = await updateMerchantBookingSettings({
+      context,
+      ...input,
+      requestId,
+    });
+    revalidateTag("public-booking-catalog", { expire: 0 });
     return jsonSuccess(
-      await updateMerchantBookingSettings({
-        context,
-        ...input,
-        requestId,
-      }),
+      result,
       { headers: { "x-request-id": requestId } },
     );
   } catch (error) {

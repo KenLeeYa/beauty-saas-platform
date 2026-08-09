@@ -7,6 +7,7 @@ import {
   Clock3,
   MapPin,
   RotateCcw,
+  ShieldCheck,
   Sparkles,
   UserRound,
 } from "lucide-react";
@@ -21,6 +22,7 @@ import {
 } from "@/components/month-calendar";
 import { LogoutButton } from "@/components/logout-button";
 import { TurnstileWidget } from "@/components/turnstile-widget";
+import { formatLocalTime } from "@/lib/presentation/date-time";
 import type { PublicAvailability } from "@/server/public-booking/availability";
 import type { PublicCatalog } from "@/server/public-booking/catalog";
 import type { BookingHoldResult } from "@/server/public-booking/hold";
@@ -49,8 +51,32 @@ function formatMoney(amountMinor: number, currency: string): string {
   }).format(amountMinor / 100);
 }
 
+type VariantCancellationPolicy =
+  PublicCatalog["services"][number]["variants"][number]["cancellationPolicy"];
+
+function formatLateCancellationRule(
+  policy: VariantCancellationPolicy,
+  currency: string,
+): string {
+  switch (policy.lateFeeMode) {
+    case "FIXED":
+      return `逾期取消費 ${formatMoney(policy.lateFeeFixedMinor ?? 0, currency)}`;
+    case "PERCENTAGE":
+      return `逾期取消費為服務金額的 ${policy.lateFeePercentage ?? 0}%`;
+    case "DEPOSIT_FORFEIT":
+      return "逾期取消將依規則扣留已付訂金";
+    default:
+      return "逾期取消不另收取消費";
+  }
+}
+
 function publicMediaLoader({ src }: ImageLoaderProps): string {
   return src;
+}
+
+function formatVariantMeta(name: string, durationMinutes: number): string {
+  const duration = `${durationMinutes} 分鐘`;
+  return name.trim() === duration ? duration : `${name} · ${duration}`;
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -459,9 +485,9 @@ export function PublicBookingFlow({
 
       <main
         id="main-content"
-        className="mx-auto grid max-w-6xl gap-8 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:py-10"
+        className="mx-auto grid max-w-6xl gap-6 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-8 lg:py-10"
       >
-        <div className="min-w-0 space-y-10">
+        <div className="min-w-0 space-y-7 sm:space-y-10">
           <section aria-labelledby="service-heading">
             <div className="flex items-center gap-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-md bg-coral/10 text-coral">
@@ -492,13 +518,13 @@ export function PublicBookingFlow({
                     <h2 className="mb-3 text-sm font-semibold text-slate-600">
                       {group.categoryName}
                     </h2>
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 sm:overflow-visible sm:pb-0">
                       {group.items.map((variant) => {
                         const selected = variant.id === selectedVariantId;
                         return (
                           <button
                             key={variant.id}
-                            className={`overflow-hidden rounded-md border text-left transition ${
+                            className={`w-[82vw] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-md border text-left transition sm:w-auto sm:max-w-none ${
                               selected
                                 ? "border-teal bg-teal/5 ring-2 ring-teal/15"
                                 : "border-slate-200 bg-white hover:border-teal/60"
@@ -518,14 +544,17 @@ export function PublicBookingFlow({
                                 width={640}
                               />
                             ) : null}
-                            <span className="block min-h-36 p-4">
+                            <span className="block min-h-32 p-3 sm:min-h-36 sm:p-4">
                               <span className="flex items-start justify-between gap-3">
                                 <span>
                                   <span className="block text-base font-semibold text-ink">
                                     {variant.serviceName}
                                   </span>
                                   <span className="mt-1 block text-sm text-slate-500">
-                                    {variant.name} · {variant.durationMinutes} 分鐘
+                                    {formatVariantMeta(
+                                      variant.name,
+                                      variant.durationMinutes,
+                                    )}
                                   </span>
                                 </span>
                                 {selected ? (
@@ -535,7 +564,7 @@ export function PublicBookingFlow({
                                   />
                                 ) : null}
                               </span>
-                              <span className="mt-4 block text-sm leading-6 text-slate-600">
+                              <span className="mt-3 line-clamp-2 block text-sm leading-6 text-slate-600 sm:mt-4 sm:line-clamp-none">
                                 {variant.description}
                               </span>
                               <span className="mt-3 block text-base font-semibold text-ink">
@@ -558,8 +587,12 @@ export function PublicBookingFlow({
                   {selectedVariant?.serviceName}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  {selectedVariant?.name} ·{" "}
-                  {selectedVariant?.durationMinutes} 分鐘
+                  {selectedVariant
+                    ? formatVariantMeta(
+                        selectedVariant.name,
+                        selectedVariant.durationMinutes,
+                      )
+                    : ""}
                 </p>
               </div>
             )}
@@ -898,14 +931,10 @@ export function PublicBookingFlow({
                     className="h-4 w-4 text-teal"
                   />
                   {hold
-                    ? `${selectedDate} ${new Date(
+                    ? `${selectedDate} ${formatLocalTime(
                         hold.selection.startsAt,
-                      ).toLocaleTimeString("zh-TW", {
-                        timeZone: catalog.location.timezone,
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: false,
-                      })}`
+                        catalog.location.timezone,
+                      )}`
                     : "尚未選擇"}
                 </dd>
               </div>
@@ -930,6 +959,39 @@ export function PublicBookingFlow({
                 ) : null}
               </div>
             </dl>
+            {selectedVariant ? (
+              <div className="mt-5 border-t border-slate-200 pt-4">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <ShieldCheck
+                    aria-hidden="true"
+                    className="h-4 w-4 text-teal"
+                  />
+                  預約規則
+                </h3>
+                <ul className="mt-3 space-y-2 text-xs leading-5 text-slate-600">
+                  <li>
+                    預約前 {selectedVariant.cancellationPolicy.freeCancellationHours}{" "}
+                    小時可免費取消
+                  </li>
+                  <li>
+                    {formatLateCancellationRule(
+                      selectedVariant.cancellationPolicy,
+                      catalog.location.currency,
+                    )}
+                  </li>
+                  <li>
+                    {catalog.location.customerCancellationEnabled
+                      ? "可從預約查詢連結自行取消"
+                      : "取消預約請直接聯繫店家"}
+                  </li>
+                  <li>
+                    {catalog.location.customerRescheduleEnabled
+                      ? "未付款的已確認預約可自行改期"
+                      : "改期請直接聯繫店家"}
+                  </li>
+                </ul>
+              </div>
+            ) : null}
           </div>
           <p className="mt-4 text-xs leading-5 text-slate-500">
             時段會短暫保留，正式送出前仍會由系統再次確認人員與空間。

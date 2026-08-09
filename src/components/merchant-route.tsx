@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { MerchantWorkspace } from "@/components/merchant-workspace";
 import { getCurrentSession } from "@/server/auth/session";
+import { hasCapability } from "@/server/authorization/capabilities";
 import { resolveMerchantContext } from "@/server/merchant/context";
 import { getMerchantWorkspaceData } from "@/server/merchant/data";
 
@@ -41,6 +42,12 @@ export async function MerchantRoute({
     organizationSlug: query.organization,
     locationSlug: query.location,
   });
+  const staffOnly =
+    hasCapability(context.roles, "booking.own.read") &&
+    !hasCapability(context.roles, "booking.read");
+  if (staffOnly && context.location) {
+    redirect(`/staff/${encodeURIComponent(context.location.slug)}`);
+  }
   const data = await getMerchantWorkspaceData(context);
   const entityRevision =
     activeView === "services"

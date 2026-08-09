@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { LogoutButton } from "@/components/logout-button";
+import { formatLocalDateTime } from "@/lib/presentation/date-time";
 import type { PublicBookingSummary } from "@/server/public-booking/booking";
 
 type ApiEnvelope<T> = {
@@ -54,16 +55,10 @@ export function BookingManage({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { booking } = summary;
-  const dateTime = new Intl.DateTimeFormat("zh-TW", {
-    timeZone: booking.location.timezone,
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(booking.service.startsAt));
+  const dateTime = formatLocalDateTime(
+    booking.service.startsAt,
+    booking.location.timezone,
+  );
 
   async function cancelBooking(): Promise<void> {
     if (

@@ -118,6 +118,7 @@ function Sync-LocalEnvFile {
     "APP_ENV=local",
     "NEXT_PUBLIC_APP_URL=http://127.0.0.1:$webPort",
     "PUBLIC_APP_ORIGINS=$($origins -join ',')",
+    "LOCAL_DEV_HOST=$localAddress",
     "",
     "DATABASE_URL=$($values.DB_URL)?pgbouncer=true&connection_limit=10",
     "DIRECT_URL=$($values.DB_URL)",

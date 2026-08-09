@@ -13,8 +13,10 @@ test("customer can replace a held time and change dates", async ({
     .getByRole("button")
     .filter({ hasText: "可查詢" });
 
-  await expect(availableDays.first()).toBeVisible();
-  await availableDays.first().click();
+  const primaryDay = availableDays.nth(1);
+  const secondaryDay = availableDays.nth(2);
+  await expect(primaryDay).toBeVisible();
+  await primaryDay.click();
 
   const timeButtons = dateSection
     .getByRole("button")
@@ -46,8 +48,8 @@ test("customer can replace a held time and change dates", async ({
     }),
   ).toHaveAttribute("aria-pressed", "true");
 
-  await expect(availableDays.nth(1)).toBeVisible();
-  await availableDays.nth(1).click();
+  await expect(secondaryDay).toBeVisible();
+  await secondaryDay.click();
   await expect(details).toHaveCount(0);
   await expect(timeButtons.first()).toBeVisible();
   await timeButtons.first().click();
@@ -57,6 +59,6 @@ test("customer can replace a held time and change dates", async ({
     "重新選時段測試",
   );
 
-  await availableDays.first().click();
+  await primaryDay.click();
   await expect(details).toHaveCount(0);
 });

@@ -1,7 +1,10 @@
+import { randomUUID } from "node:crypto";
+
 import { defineConfig, devices } from "@playwright/test";
 
 const appUrl = process.env.PLAYWRIGHT_APP_URL ?? "http://127.0.0.1:3101";
 const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER === "true";
+const runClientIdentifier = randomUUID();
 
 export default defineConfig({
   testDir: "./e2e",
@@ -28,7 +31,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         extraHTTPHeaders: {
-          "x-test-client-ip": "198.51.100.10"
+          "x-test-client-ip": `e2e-desktop:${runClientIdentifier}`
         }
       }
     },
@@ -37,7 +40,7 @@ export default defineConfig({
       use: {
         ...devices["Pixel 7"],
         extraHTTPHeaders: {
-          "x-test-client-ip": "198.51.100.11"
+          "x-test-client-ip": `e2e-mobile:${runClientIdentifier}`
         }
       }
     }

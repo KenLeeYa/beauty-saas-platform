@@ -55,6 +55,9 @@ export type MerchantWorkspaceData = {
     depositMode: "FIXED" | "PERCENTAGE";
     depositAmountMinor: number;
     depositPercentage: number;
+    customerCancellationEnabled: boolean;
+    customerRescheduleEnabled: boolean;
+    cancellationCutoffHours: number;
   };
   capabilities: string[];
   stats: {
@@ -105,6 +108,8 @@ export type MerchantWorkspaceData = {
     variantName: string;
     durationMinutes: number;
     priceMinor: number;
+    preBufferMinutes: number;
+    postBufferMinutes: number;
     onlineBookingEnabled: boolean;
     staffCount: number;
     categoryName: string | null;
@@ -138,6 +143,23 @@ export type MerchantWorkspaceData = {
     cancelledCount: number;
     noShowCount: number;
     totalSpendMinor: string;
+    tags: Array<{
+      id: string;
+      name: string;
+      color: string | null;
+    }>;
+    notes: Array<{
+      id: string;
+      note: string;
+      sensitivity: "STANDARD" | "SENSITIVE" | "MEDICAL";
+      createdAt: string;
+      authorName: string;
+    }>;
+  }>;
+  customerTags: Array<{
+    id: string;
+    name: string;
+    color: string | null;
   }>;
   locations: Array<{
     id: string;
@@ -189,11 +211,22 @@ export type MerchantWorkspaceData = {
     lastVerifiedAt: string | null;
     lastErrorCode: string | null;
   }>;
+  notificationHealth: {
+    pending: number;
+    processing: number;
+    failed: number;
+    deadLetter: number;
+  };
   notificationDeliveries: Array<{
     id: string;
+    jobId: string;
     channel: string;
     eventType: string;
     status: string;
+    jobStatus: string;
+    attemptCount: number;
+    maxAttempts: number;
+    nextAttemptAt: string | null;
     errorCode: string | null;
     createdAt: string;
   }>;
@@ -261,11 +294,13 @@ export async function getMerchantWorkspaceData(
     staffRecords,
     resourceRecords,
     customerRecords,
+    customerTagRecords,
     locationRecords,
     organizationRecord,
     notificationIntegrationRecords,
     invoiceRecords,
     notificationDeliveryRecords,
+    notificationJobStatusRecords,
     depositEntitlement,
     blacklistEntitlement,
   ] = await Promise.all([
@@ -282,6 +317,9 @@ export async function getMerchantWorkspaceData(
         location_booking_policies: {
           select: {
             deposits_enabled: true,
+            customer_cancellation_enabled: true,
+            customer_reschedule_enabled: true,
+            cancellation_cutoff_hours: true,
           },
         },
         deposit_policies: {
@@ -424,6 +462,8 @@ export async function getMerchantWorkspaceData(
                 name: true,
                 duration_minutes: true,
                 price_minor: true,
+                pre_buffer_minutes: true,
+                post_buffer_minutes: true,
               },
             },
             service_staff_assignments: {
@@ -519,6 +559,58 @@ export async function getMerchantWorkspaceData(
                 total_spend_minor: true,
               },
             },
+            customer_tag_assignments: {
+              orderBy: {
+                created_at: "asc",
+              },
+              select: {
+                customer_tags: {
+                  select: {
+                    id: true,
+                    name: true,
+                    color: true,
+                  },
+                },
+              },
+            },
+            customer_notes: {
+              where: {
+                deleted_at: null,
+                ...(canReadSensitiveCustomers
+                  ? {}
+                  : { sensitivity: "STANDARD" as const }),
+              },
+              orderBy: {
+                created_at: "desc",
+              },
+              take: 5,
+              select: {
+                id: true,
+                note: true,
+                sensitivity: true,
+                created_at: true,
+                profiles_customer_notes_created_byToprofiles: {
+                  select: {
+                    display_name: true,
+                  },
+                },
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+    canReadCustomers
+      ? prisma.customer_tags.findMany({
+          where: {
+            organization_id: context.organization.id,
+          },
+          orderBy: {
+            name: "asc",
+          },
+          select: {
+            id: true,
+            name: true,
+            color: true,
           },
         })
       : Promise.resolve([]),
@@ -654,6 +746,11 @@ export async function getMerchantWorkspaceData(
             created_at: true,
             notification_jobs: {
               select: {
+                id: true,
+                status: true,
+                attempt_count: true,
+                max_attempts: true,
+                next_attempt_at: true,
                 notification_outbox: {
                   select: {
                     event_type: true,
@@ -661,6 +758,20 @@ export async function getMerchantWorkspaceData(
                 },
               },
             },
+          },
+        })
+      : Promise.resolve([]),
+    canReadNotificationStatus
+      ? prisma.notification_jobs.groupBy({
+          by: ["status"],
+          where: {
+            organization_id: context.organization.id,
+            notification_outbox: {
+              location_id: location.id,
+            },
+          },
+          _count: {
+            _all: true,
           },
         })
       : Promise.resolve([]),
@@ -789,6 +900,12 @@ export async function getMerchantWorkspaceData(
         setup.test_booking_completed_at ?? setup.go_live_at,
       ].filter(Boolean).length
     : 0;
+  const notificationCountByStatus = new Map(
+    notificationJobStatusRecords.map((record) => [
+      record.status,
+      record._count._all,
+    ]),
+  );
 
   return {
     session: {
@@ -837,6 +954,15 @@ export async function getMerchantWorkspaceData(
       depositPercentage: Number(
         locationRecord.deposit_policies[0]?.percentage ?? 30,
       ),
+      customerCancellationEnabled:
+        locationRecord.location_booking_policies
+          ?.customer_cancellation_enabled ?? true,
+      customerRescheduleEnabled:
+        locationRecord.location_booking_policies
+          ?.customer_reschedule_enabled ?? true,
+      cancellationCutoffHours:
+        locationRecord.location_booking_policies
+          ?.cancellation_cutoff_hours ?? 24,
     },
     capabilities: [
       ...capabilitiesForRoles(context.roles),
@@ -875,6 +1001,8 @@ export async function getMerchantWorkspaceData(
       priceMinor:
         service.price_override_minor ??
         service.service_variants.price_minor,
+      preBufferMinutes: service.service_variants.pre_buffer_minutes,
+      postBufferMinutes: service.service_variants.post_buffer_minutes,
       onlineBookingEnabled: service.online_booking_enabled,
       staffCount: service.service_staff_assignments.length,
       categoryName: service.services.service_categories?.name ?? null,
@@ -895,10 +1023,17 @@ export async function getMerchantWorkspaceData(
       kind: resource.resource_types.kind,
       isActive: resource.is_active,
     })),
+    customerTags: customerTagRecords.map((tag) => ({
+      id: tag.id,
+      name: tag.name,
+      color: tag.color,
+    })),
     customers: customerRecords.map((customer) => ({
       id: customer.id,
       displayName: customer.display_name,
-      phone: customer.customer_contacts[0]?.value ?? null,
+      phone: canReadSensitiveCustomers
+        ? customer.customer_contacts[0]?.value ?? null
+        : null,
       birthday: customer.birthday?.toISOString().slice(0, 10) ?? null,
       depositMode: customer.deposit_mode,
       isBlacklisted: customer.is_blacklisted,
@@ -914,6 +1049,21 @@ export async function getMerchantWorkspaceData(
       totalSpendMinor:
         customer.customer_metrics?.total_spend_minor.toString() ??
         "0",
+      tags: customer.customer_tag_assignments.map(
+        (assignment) => ({
+          id: assignment.customer_tags.id,
+          name: assignment.customer_tags.name,
+          color: assignment.customer_tags.color,
+        }),
+      ),
+      notes: customer.customer_notes.map((note) => ({
+        id: note.id,
+        note: note.note,
+        sensitivity: note.sensitivity,
+        createdAt: note.created_at.toISOString(),
+        authorName:
+          note.profiles_customer_notes_created_byToprofiles.display_name,
+      })),
     })),
     locations: locationRecords.map((item) => ({
       id: item.id,
@@ -980,13 +1130,26 @@ export async function getMerchantWorkspaceData(
         lastErrorCode: integration.last_error_code,
       }),
     ),
+    notificationHealth: {
+      pending: notificationCountByStatus.get("PENDING") ?? 0,
+      processing: notificationCountByStatus.get("PROCESSING") ?? 0,
+      failed: notificationCountByStatus.get("FAILED") ?? 0,
+      deadLetter: notificationCountByStatus.get("DEAD_LETTER") ?? 0,
+    },
     notificationDeliveries: notificationDeliveryRecords.map(
       (delivery) => ({
         id: delivery.id,
+        jobId: delivery.notification_jobs.id,
         channel: delivery.channel,
         eventType:
           delivery.notification_jobs.notification_outbox.event_type,
         status: delivery.status,
+        jobStatus: delivery.notification_jobs.status,
+        attemptCount: delivery.notification_jobs.attempt_count,
+        maxAttempts: delivery.notification_jobs.max_attempts,
+        nextAttemptAt:
+          delivery.notification_jobs.next_attempt_at?.toISOString() ??
+          null,
         errorCode: delivery.error_code,
         createdAt: delivery.created_at.toISOString(),
       }),

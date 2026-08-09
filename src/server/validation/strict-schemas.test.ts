@@ -4,7 +4,9 @@ import { adminBillingActionSchema } from "../admin/billing-schemas";
 import { organizationFeatureOverrideSchema } from "../admin/feature-schemas";
 import {
   createMerchantServiceSchema,
+  merchantBookingSettingsSchema,
   merchantDayScheduleSchema,
+  merchantServiceUpdateSchema,
   updateMerchantCustomerSchema,
 } from "../merchant/schemas";
 import {
@@ -26,6 +28,40 @@ describe("strict API schemas", () => {
         tenant_id: "attacker-controlled",
       }).success,
     ).toBe(false);
+  });
+
+  it("validates service buffers and customer booking controls", () => {
+    expect(
+      createMerchantServiceSchema.safeParse({
+        name: "臉部護理",
+        variantName: "60 分鐘",
+        description: "",
+        durationMinutes: 60,
+        priceMinor: 180_000,
+        preBufferMinutes: 15,
+        postBufferMinutes: 10,
+      }).success,
+    ).toBe(true);
+    expect(
+      merchantServiceUpdateSchema.safeParse({
+        action: "UPDATE_BUFFERS",
+        locationServiceId: "00000000-0000-4000-8000-000000000001",
+        preBufferMinutes: 241,
+        postBufferMinutes: 0,
+      }).success,
+    ).toBe(false);
+    expect(
+      merchantBookingSettingsSchema.safeParse({
+        onlineBookingEnabled: true,
+        depositsEnabled: false,
+        depositMode: "FIXED",
+        depositAmountMinor: 0,
+        depositPercentage: 0,
+        customerCancellationEnabled: true,
+        customerRescheduleEnabled: true,
+        cancellationCutoffHours: 24,
+      }).success,
+    ).toBe(true);
   });
 
   it("rejects restricted merchant application fields", () => {

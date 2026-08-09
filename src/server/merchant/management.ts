@@ -59,6 +59,8 @@ export async function createMerchantService(input: {
   description: string;
   durationMinutes: number;
   priceMinor: number;
+  preBufferMinutes: number;
+  postBufferMinutes: number;
   requestId: string;
 }): Promise<{
   serviceId: string;
@@ -134,6 +136,8 @@ export async function createMerchantService(input: {
           name: input.variantName,
           duration_minutes: input.durationMinutes,
           price_minor: input.priceMinor,
+          pre_buffer_minutes: input.preBufferMinutes,
+          post_buffer_minutes: input.postBufferMinutes,
           is_default: true,
           is_active: true,
         },
@@ -206,6 +210,8 @@ export async function createMerchantService(input: {
           categoryName: input.categoryName,
           durationMinutes: input.durationMinutes,
           priceMinor: input.priceMinor,
+          preBufferMinutes: input.preBufferMinutes,
+          postBufferMinutes: input.postBufferMinutes,
         },
       });
       await transaction.merchant_setup_progress.updateMany({
@@ -267,6 +273,61 @@ export async function setMerchantServiceOnline(input: {
       },
     },
   });
+  return { success: true };
+}
+
+export async function updateMerchantServiceBuffers(input: {
+  context: OrganizationContext;
+  locationServiceId: string;
+  preBufferMinutes: number;
+  postBufferMinutes: number;
+  requestId: string;
+}): Promise<{ success: true }> {
+  assertCapability(input.context, "catalog.manage");
+  const location = requireLocation(input.context);
+
+  await prisma.$transaction(async (transaction) => {
+    const locationService = await transaction.location_services.findFirst({
+      where: {
+        id: input.locationServiceId,
+        organization_id: input.context.organization.id,
+        location_id: location.id,
+      },
+      select: {
+        service_variant_id: true,
+      },
+    });
+    if (!locationService) {
+      throw new AppError("NOT_FOUND", "找不到服務。", 404);
+    }
+
+    const updated = await transaction.service_variants.updateMany({
+      where: {
+        id: locationService.service_variant_id,
+        organization_id: input.context.organization.id,
+      },
+      data: {
+        pre_buffer_minutes: input.preBufferMinutes,
+        post_buffer_minutes: input.postBufferMinutes,
+      },
+    });
+    if (updated.count !== 1) {
+      throw new AppError("NOT_FOUND", "找不到服務規格。", 404);
+    }
+
+    await audit(transaction, {
+      context: input.context,
+      action: "SERVICE_BUFFER_UPDATE",
+      targetType: "SERVICE_VARIANT",
+      targetId: locationService.service_variant_id,
+      requestId: input.requestId,
+      after: {
+        preBufferMinutes: input.preBufferMinutes,
+        postBufferMinutes: input.postBufferMinutes,
+      },
+    });
+  });
+
   return { success: true };
 }
 
@@ -759,6 +820,9 @@ export async function updateMerchantBookingSettings(input: {
   depositMode: "FIXED" | "PERCENTAGE";
   depositAmountMinor: number;
   depositPercentage: number;
+  customerCancellationEnabled: boolean;
+  customerRescheduleEnabled: boolean;
+  cancellationCutoffHours: number;
   requestId: string;
 }): Promise<{ success: true }> {
   assertCapability(input.context, "location.manage");
@@ -783,11 +847,57 @@ export async function updateMerchantBookingSettings(input: {
           organization_id: input.context.organization.id,
           location_id: location.id,
           deposits_enabled: input.depositsEnabled,
+          customer_cancellation_enabled:
+            input.customerCancellationEnabled,
+          customer_reschedule_enabled: input.customerRescheduleEnabled,
+          cancellation_cutoff_hours: input.cancellationCutoffHours,
         },
         update: {
           deposits_enabled: input.depositsEnabled,
+          customer_cancellation_enabled:
+            input.customerCancellationEnabled,
+          customer_reschedule_enabled: input.customerRescheduleEnabled,
+          cancellation_cutoff_hours: input.cancellationCutoffHours,
         },
       });
+
+      const cancellation =
+        await transaction.cancellation_policies.findFirst({
+          where: {
+            organization_id: input.context.organization.id,
+            location_id: location.id,
+            service_variant_id: null,
+          },
+          orderBy: {
+            created_at: "asc",
+          },
+          select: {
+            id: true,
+          },
+        });
+      if (cancellation) {
+        await transaction.cancellation_policies.update({
+          where: {
+            id: cancellation.id,
+          },
+          data: {
+            free_cancellation_hours: input.cancellationCutoffHours,
+            is_active: true,
+          },
+        });
+      } else {
+        await transaction.cancellation_policies.create({
+          data: {
+            organization_id: input.context.organization.id,
+            location_id: location.id,
+            name: "一般取消規則",
+            free_cancellation_hours: input.cancellationCutoffHours,
+            late_fee_mode: "DEPOSIT_FORFEIT",
+            no_show_fee_mode: "DEPOSIT_FORFEIT",
+            is_active: true,
+          },
+        });
+      }
 
       const deposit = await transaction.deposit_policies.findFirst({
         where: {
@@ -850,6 +960,9 @@ export async function updateMerchantBookingSettings(input: {
           depositMode: input.depositMode,
           depositAmountMinor: input.depositAmountMinor,
           depositPercentage: input.depositPercentage,
+          customerCancellationEnabled: input.customerCancellationEnabled,
+          customerRescheduleEnabled: input.customerRescheduleEnabled,
+          cancellationCutoffHours: input.cancellationCutoffHours,
         },
       });
     },

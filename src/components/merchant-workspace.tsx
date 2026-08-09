@@ -8,7 +8,6 @@ import {
   BriefcaseBusiness,
   Building2,
   CalendarDays,
-  Cake,
   Check,
   ChevronRight,
   Clock3,
@@ -17,15 +16,14 @@ import {
   ImagePlus,
   LayoutDashboard,
   LogOut,
-  LockKeyhole,
   Menu,
   PackagePlus,
   PauseCircle,
   Plus,
   ReceiptText,
   Rocket,
+  Save,
   Settings,
-  ShieldBan,
   Store,
   TestTube2,
   UserRound,
@@ -47,7 +45,17 @@ import {
   MonthCalendar,
 } from "@/components/month-calendar";
 import type { MerchantView } from "@/components/merchant-route";
-import { formatLocalDate } from "@/lib/presentation/date-time";
+import {
+  formatLocalDate,
+  formatLocalDateKey,
+  formatLocalMonthDayTime,
+} from "@/lib/presentation/date-time";
+import {
+  CustomerManagement,
+  type CustomerProfileUpdate,
+  type NewCustomerInput,
+} from "@/modules/crm/components/customer-management";
+import { NotificationHealthPanel } from "@/modules/notifications/components/notification-health-panel";
 import type { MerchantWorkspaceData } from "@/server/merchant/data";
 
 type ApiEnvelope<T> = {
@@ -123,37 +131,6 @@ const statusClasses: Readonly<Record<string, string>> = {
   RESCHEDULED: "bg-violet-100 text-violet-800",
 };
 
-const notificationEventLabels: Readonly<Record<string, string>> = {
-  BOOKING_CONFIRMED: "預約已確認",
-  BOOKING_RESCHEDULED: "預約已改期",
-  BOOKING_CANCELLED: "預約已取消",
-  BOOKING_REMINDER_24H: "預約前一天提醒",
-  BOOKING_REMINDER_3H: "預約前三小時提醒",
-  BOOKING_REMINDER_1H: "預約前一小時提醒",
-  BOOKING_PAYMENT_PENDING: "待確認訂金",
-  BOOKING_PAYMENT_CONFIRMED: "訂金已確認",
-  BOOKING_COMPLETED: "服務完成",
-  REVIEW_REQUEST: "回饋邀請",
-  REVISIT_REMINDER: "回訪提醒",
-  NO_SHOW_NOTICE: "未到店通知",
-};
-
-const deliveryStatusLabels: Readonly<Record<string, string>> = {
-  PENDING: "等待中",
-  SENT: "已送出",
-  FAILED: "傳送失敗",
-  SKIPPED: "已略過",
-  DISABLED: "未啟用",
-};
-
-const deliveryStatusClasses: Readonly<Record<string, string>> = {
-  PENDING: "bg-amber-100 text-amber-800",
-  SENT: "bg-emerald-100 text-emerald-800",
-  FAILED: "bg-red-100 text-red-700",
-  SKIPPED: "bg-slate-100 text-slate-600",
-  DISABLED: "bg-slate-100 text-slate-600",
-};
-
 function formatMoney(amountMinor: number, currency: string): string {
   return new Intl.NumberFormat("zh-TW", {
     style: "currency",
@@ -167,32 +144,6 @@ function csrfToken(): string {
     .split("; ")
     .find((item) => item.startsWith("beauty_csrf="));
   return match ? decodeURIComponent(match.split("=").slice(1).join("=")) : "";
-}
-
-function localDate(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
-}
-
-function formatCompactLocalDateTime(
-  value: string,
-  timezone: string,
-): string {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: timezone,
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date(value));
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((item) => item.type === type)?.value ?? "";
-  return `${Number(part("month"))}/${Number(part("day"))} ${part("hour")}:${part("minute")}`;
 }
 
 function publicMediaLoader({ src }: ImageLoaderProps): string {
@@ -218,11 +169,15 @@ function StatCard({
   };
   return (
     <article
-      className={`min-h-28 rounded-md border border-slate-200 border-t-4 bg-white p-4 ${colors[accent]}`}
+      className={`rounded-md border border-slate-200 border-t-4 bg-white p-3 sm:min-h-28 sm:p-4 ${colors[accent]}`}
     >
       <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-ink">{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{detail}</p>
+      <p className="mt-1 text-xl font-semibold text-ink sm:mt-2 sm:text-2xl">
+        {value}
+      </p>
+      <p className="mt-0.5 text-[11px] leading-4 text-slate-500 sm:mt-1 sm:text-xs">
+        {detail}
+      </p>
     </article>
   );
 }
@@ -251,7 +206,7 @@ export function MerchantWorkspace({
 }) {
   const router = useRouter();
   const [data, setData] = useState(initialData);
-  const initialSelectedDate = localDate(
+  const initialSelectedDate = formatLocalDateKey(
     new Date(),
     initialData.location.timezone,
   );
@@ -310,7 +265,7 @@ export function MerchantWorkspace({
       data.bookings
         .filter(
           (booking) =>
-            localDate(
+            formatLocalDateKey(
               new Date(booking.startsAt),
               data.location.timezone,
             ) === selectedDate,
@@ -491,14 +446,57 @@ export function MerchantWorkspace({
     }
   }
 
+  async function createCustomer(
+    input: NewCustomerInput,
+  ): Promise<boolean> {
+    setIsSubmitting(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      const result = await mutate<{ id: string }>(
+        "/api/merchant/customers",
+        "POST",
+        input,
+      );
+      setData((current) => ({
+        ...current,
+        customers: [
+          {
+            id: result.id,
+            displayName: input.displayName,
+            phone: current.capabilities.includes("customer.sensitive.read")
+              ? input.phone
+              : null,
+            birthday: input.birthday || null,
+            depositMode: "DEFAULT",
+            isBlacklisted: false,
+            blacklistReason: null,
+            lastServiceAt: null,
+            completedCount: 0,
+            cancelledCount: 0,
+            noShowCount: 0,
+            totalSpendMinor: "0",
+            tags: [],
+            notes: [],
+          },
+          ...current.customers,
+        ],
+      }));
+      setFeedback("顧客已建立。");
+      return true;
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "顧客建立失敗。",
+      );
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function updateCustomer(
     customerId: string,
-    update: {
-      birthday?: string;
-      depositMode?: "DEFAULT" | "REQUIRED" | "EXEMPT";
-      isBlacklisted?: boolean;
-      blacklistReason?: string;
-    },
+    update: CustomerProfileUpdate,
   ): Promise<void> {
     setIsSubmitting(true);
     setError(null);
@@ -542,6 +540,205 @@ export function MerchantWorkspace({
     }
   }
 
+  async function createCustomerTag(input: {
+    name: string;
+    color: string;
+  }): Promise<boolean> {
+    setIsSubmitting(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      const tag = await mutate<
+        MerchantWorkspaceData["customerTags"][number]
+      >("/api/merchant/customers/tags", "POST", {
+        action: "CREATE",
+        ...input,
+      });
+      setData((current) => ({
+        ...current,
+        customerTags: [...current.customerTags, tag].sort((left, right) =>
+          left.name.localeCompare(right.name, "zh-TW"),
+        ),
+      }));
+      setFeedback("顧客標籤已建立。");
+      return true;
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "顧客標籤建立失敗。",
+      );
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function setCustomerTag(input: {
+    customerId: string;
+    tagId: string;
+    assigned: boolean;
+  }): Promise<void> {
+    setIsSubmitting(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      await mutate("/api/merchant/customers/tags", "POST", {
+        action: input.assigned ? "ASSIGN" : "UNASSIGN",
+        customerId: input.customerId,
+        tagId: input.tagId,
+      });
+      setData((current) => {
+        const tag = current.customerTags.find(
+          (candidate) => candidate.id === input.tagId,
+        );
+        return {
+          ...current,
+          customers: current.customers.map((customer) =>
+            customer.id === input.customerId
+              ? {
+                  ...customer,
+                  tags:
+                    input.assigned && tag
+                      ? customer.tags.some(
+                          (assignedTag) => assignedTag.id === tag.id,
+                        )
+                        ? customer.tags
+                        : [...customer.tags, tag]
+                      : customer.tags.filter(
+                          (assignedTag) => assignedTag.id !== input.tagId,
+                        ),
+                }
+              : customer,
+          ),
+        };
+      });
+      setFeedback(input.assigned ? "標籤已加入。" : "標籤已移除。");
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "顧客標籤更新失敗。",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function createCustomerNote(input: {
+    customerId: string;
+    note: string;
+    sensitivity: "STANDARD" | "SENSITIVE";
+  }): Promise<boolean> {
+    setIsSubmitting(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      const note = await mutate<
+        MerchantWorkspaceData["customers"][number]["notes"][number]
+      >("/api/merchant/customers/notes", "POST", input);
+      setData((current) => ({
+        ...current,
+        customers: current.customers.map((customer) =>
+          customer.id === input.customerId
+            ? { ...customer, notes: [note, ...customer.notes].slice(0, 5) }
+            : customer,
+        ),
+      }));
+      setFeedback("顧客備註已新增。");
+      return true;
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "顧客備註新增失敗。",
+      );
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function retryNotification(deliveryId: string): Promise<void> {
+    const delivery = data.notificationDeliveries.find(
+      (item) => item.id === deliveryId,
+    );
+    if (!delivery) {
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      const result = await mutate<{
+        jobId: string;
+        status: "PENDING";
+        nextAttemptAt: string;
+      }>("/api/merchant/notifications/retry", "POST", { deliveryId });
+      setData((current) => ({
+        ...current,
+        notificationHealth: {
+          ...current.notificationHealth,
+          pending: current.notificationHealth.pending + 1,
+          failed:
+            delivery.jobStatus === "FAILED"
+              ? Math.max(0, current.notificationHealth.failed - 1)
+              : current.notificationHealth.failed,
+          deadLetter:
+            delivery.jobStatus === "DEAD_LETTER"
+              ? Math.max(0, current.notificationHealth.deadLetter - 1)
+              : current.notificationHealth.deadLetter,
+        },
+        notificationDeliveries: current.notificationDeliveries.map((item) =>
+          item.jobId === result.jobId
+            ? {
+                ...item,
+                jobStatus: result.status,
+                nextAttemptAt: result.nextAttemptAt,
+              }
+            : item,
+        ),
+      }));
+      setFeedback("通知已排入重試佇列。");
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "通知重試失敗。",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function updateServiceBuffers(
+    event: FormEvent<HTMLFormElement>,
+    locationServiceId: string,
+  ): Promise<void> {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const preBufferMinutes = Number(form.get("preBufferMinutes"));
+    const postBufferMinutes = Number(form.get("postBufferMinutes"));
+    setIsSubmitting(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      await mutate("/api/merchant/services", "PATCH", {
+        action: "UPDATE_BUFFERS",
+        locationServiceId,
+        preBufferMinutes,
+        postBufferMinutes,
+      });
+      setData((current) => ({
+        ...current,
+        services: current.services.map((service) =>
+          service.locationServiceId === locationServiceId
+            ? { ...service, preBufferMinutes, postBufferMinutes }
+            : service,
+        ),
+      }));
+      setFeedback("服務緩衝時間已更新，可預約時段會立即重新計算。");
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "服務緩衝時間更新失敗。",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function updateBookingStatus(
     bookingId: string,
     nextStatus: string,
@@ -564,6 +761,7 @@ export function MerchantWorkspace({
 
     setIsSubmitting(true);
     setError(null);
+    setFeedback(null);
     try {
       const result = await mutate<{
         id: string;
@@ -771,7 +969,7 @@ export function MerchantWorkspace({
     return (
       <div className="divide-y divide-slate-200 border-y border-slate-200 bg-white">
         {bookings.map((booking) => {
-          const time = formatCompactLocalDateTime(
+          const time = formatLocalMonthDayTime(
             booking.startsAt,
             data.location.timezone,
           );
@@ -920,8 +1118,8 @@ export function MerchantWorkspace({
 
   function renderDashboard(): ReactNode {
     return (
-      <div className="space-y-8">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="space-y-5 sm:space-y-8">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
           <StatCard
             accent="teal"
             detail="依分店時區計算"
@@ -952,7 +1150,7 @@ export function MerchantWorkspace({
         </div>
 
         {data.stats.pendingBookings > 0 ? (
-          <div className="flex items-start gap-3 border-l-4 border-coral bg-white px-4 py-4">
+          <div className="flex items-start gap-3 border-l-4 border-coral bg-white px-3 py-3 sm:px-4 sm:py-4">
             <Bell
               aria-hidden="true"
               className="mt-0.5 h-5 w-5 shrink-0 text-coral"
@@ -966,7 +1164,7 @@ export function MerchantWorkspace({
           </div>
         ) : null}
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
           <section aria-labelledby="dashboard-calendar-heading">
             <div className="mb-3 flex items-center justify-between">
               <h2
@@ -1287,6 +1485,8 @@ export function MerchantWorkspace({
                   priceMinor: Math.round(
                     Number(form.get("price")) * 100,
                   ),
+                  preBufferMinutes: Number(form.get("preBufferMinutes")),
+                  postBufferMinutes: Number(form.get("postBufferMinutes")),
                 }),
               )
             }
@@ -1311,6 +1511,22 @@ export function MerchantWorkspace({
               label="價格（TWD）"
               min="0"
               required
+              type="number"
+            />
+            <Field
+              defaultValue="0"
+              label="服務前緩衝（分鐘）"
+              max="240"
+              min="0"
+              name="preBufferMinutes"
+              type="number"
+            />
+            <Field
+              defaultValue="0"
+              label="服務後緩衝（分鐘）"
+              max="240"
+              min="0"
+              name="postBufferMinutes"
               type="number"
             />
             <label className="sm:col-span-2">
@@ -1465,6 +1681,60 @@ export function MerchantWorkspace({
                             />
                           ) : null}
                         </div>
+                        {can("catalog.manage") ? (
+                          <form
+                            className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_40px] items-end gap-2 border-t border-slate-100 pt-4"
+                            onSubmit={(event) =>
+                              void updateServiceBuffers(
+                                event,
+                                service.locationServiceId,
+                              )
+                            }
+                          >
+                            <label className="min-w-0">
+                              <span className="block text-xs font-medium text-slate-500">
+                                前置緩衝
+                              </span>
+                              <input
+                                className="mt-1 h-10 w-full min-w-0 rounded-md border border-slate-300 px-2 text-sm"
+                                defaultValue={service.preBufferMinutes}
+                                disabled={isSubmitting}
+                                max="240"
+                                min="0"
+                                name="preBufferMinutes"
+                                type="number"
+                              />
+                            </label>
+                            <label className="min-w-0">
+                              <span className="block text-xs font-medium text-slate-500">
+                                後置緩衝
+                              </span>
+                              <input
+                                className="mt-1 h-10 w-full min-w-0 rounded-md border border-slate-300 px-2 text-sm"
+                                defaultValue={service.postBufferMinutes}
+                                disabled={isSubmitting}
+                                max="240"
+                                min="0"
+                                name="postBufferMinutes"
+                                type="number"
+                              />
+                            </label>
+                            <button
+                              aria-label="儲存服務緩衝時間"
+                              className="flex h-10 w-10 items-center justify-center rounded-md bg-ink text-white disabled:opacity-50"
+                              disabled={isSubmitting}
+                              title="儲存服務緩衝時間"
+                              type="submit"
+                            >
+                              <Save aria-hidden="true" className="h-4 w-4" />
+                            </button>
+                          </form>
+                        ) : (
+                          <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                            前置 {service.preBufferMinutes} 分鐘 · 後置{" "}
+                            {service.postBufferMinutes} 分鐘
+                          </p>
+                        )}
                       </div>
                     </article>
                   ))}
@@ -1652,193 +1922,23 @@ export function MerchantWorkspace({
 
   function renderCustomers(): ReactNode {
     return (
-      <div>
-        <EntityToolbar
-          canCreate={can("customer.manage")}
-          formOpen={formOpen}
-          label="新增顧客"
-          onToggle={() => setFormOpen((current) => !current)}
-        />
-        {formOpen ? (
-          <form
-            className="mb-6 grid gap-4 border-y border-slate-200 bg-white px-4 py-5 sm:grid-cols-2"
-            onSubmit={(event) =>
-              void submitForm(
-                event,
-                "/api/merchant/customers",
-                (form) => ({
-                  displayName: form.get("displayName"),
-                  phone: form.get("phone"),
-                  email: form.get("email"),
-                  birthday: form.get("birthday"),
-                }),
-              )
-            }
-          >
-            <Field name="displayName" label="顧客姓名" required />
-            <Field name="phone" label="手機" required />
-            <Field name="email" label="Email" type="email" />
-            <Field name="birthday" label="生日" type="date" />
-            <SubmitButton busy={isSubmitting} />
-          </form>
-        ) : null}
-        {!data.features.customerBlacklist ? (
-          <div className="mb-5 flex items-start gap-3 border-y border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <LockKeyhole aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold">顧客黑名單為加值功能</p>
-              <p className="mt-1 text-amber-800">
-                可記錄爽約與經常取消的顧客，並阻擋相同聯絡方式再次線上預約。
-              </p>
-            </div>
-            <Link
-              className="shrink-0 font-semibold underline"
-              href={`/merchant/subscription?${scope}`}
-            >
-              查看方案
-            </Link>
-          </div>
-        ) : null}
-        {data.customers.length === 0 ? (
-          <EmptyState
-            title="尚未有顧客資料"
-            body="線上預約確認後，顧客會自動加入 CRM。"
-          />
-        ) : (
-          <div className="divide-y divide-slate-200 border-y border-slate-200 bg-white">
-            {data.customers.map((customer) => (
-              <article
-                key={customer.id}
-                className="px-4 py-5"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-ink">
-                        {customer.displayName}
-                      </p>
-                      {customer.isBlacklisted ? (
-                        <span className="rounded bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
-                          黑名單
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {customer.phone ?? "未提供手機"}
-                    </p>
-                  </div>
-                  <p className="text-lg font-semibold text-ink">
-                    {formatMoney(
-                      Number(customer.totalSpendMinor),
-                      data.stats.currency,
-                    )}
-                  </p>
-                </div>
-                <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                  <span className="rounded-md bg-emerald-50 px-3 py-2 text-emerald-800">
-                    完成 {customer.completedCount} 次
-                  </span>
-                  <span className="rounded-md bg-amber-50 px-3 py-2 text-amber-800">
-                    取消 {customer.cancelledCount} 次
-                  </span>
-                  <span className="rounded-md bg-red-50 px-3 py-2 text-red-700">
-                    爽約 {customer.noShowCount} 次
-                  </span>
-                </div>
-                <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 md:grid-cols-[minmax(150px,0.8fr)_minmax(190px,1fr)_auto] md:items-end">
-                  <label>
-                    <span className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                      <Cake aria-hidden="true" className="h-4 w-4" />
-                      會員生日
-                    </span>
-                    <input
-                      className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                      defaultValue={customer.birthday ?? ""}
-                      disabled={!can("customer.manage") || isSubmitting}
-                      type="date"
-                      onBlur={(event) => {
-                        if (event.target.value !== (customer.birthday ?? "")) {
-                          void updateCustomer(customer.id, {
-                            birthday: event.target.value,
-                          });
-                        }
-                      }}
-                    />
-                  </label>
-                  <label>
-                    <span className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                      <BadgeDollarSign aria-hidden="true" className="h-4 w-4" />
-                      此顧客訂金規則
-                    </span>
-                    <select
-                      className="mt-2 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100"
-                      disabled={
-                        !can("customer.manage") ||
-                        !data.features.deposits ||
-                        isSubmitting
-                      }
-                      value={customer.depositMode}
-                      onChange={(event) =>
-                        void updateCustomer(customer.id, {
-                          depositMode: event.target.value as
-                            | "DEFAULT"
-                            | "REQUIRED"
-                            | "EXEMPT",
-                        })
-                      }
-                    >
-                      <option value="DEFAULT">依分店設定</option>
-                      <option value="REQUIRED">指定收取訂金</option>
-                      <option value="EXEMPT">免收訂金</option>
-                    </select>
-                  </label>
-                  {can("customer.manage") &&
-                  data.features.customerBlacklist ? (
-                    <button
-                      className={`flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold ${
-                        customer.isBlacklisted
-                          ? "border-slate-300 text-slate-700"
-                          : "border-red-200 text-red-700"
-                      }`}
-                      disabled={isSubmitting}
-                      type="button"
-                      onClick={() => {
-                        if (customer.isBlacklisted) {
-                          if (window.confirm("確定將此顧客移出黑名單？")) {
-                            void updateCustomer(customer.id, {
-                              isBlacklisted: false,
-                            });
-                          }
-                          return;
-                        }
-                        const reason = window
-                          .prompt(
-                            "請輸入列入黑名單原因，例如爽約或多次臨時取消：",
-                          )
-                          ?.trim();
-                        if (reason) {
-                          void updateCustomer(customer.id, {
-                            isBlacklisted: true,
-                            blacklistReason: reason,
-                          });
-                        }
-                      }}
-                    >
-                      <ShieldBan aria-hidden="true" className="h-4 w-4" />
-                      {customer.isBlacklisted ? "移出黑名單" : "列入黑名單"}
-                    </button>
-                  ) : null}
-                </div>
-                {customer.blacklistReason ? (
-                  <p className="mt-3 text-xs text-red-700">
-                    黑名單原因：{customer.blacklistReason}
-                  </p>
-                ) : null}
-              </article>
-            ))}
-          </div>
-        )}
-      </div>
+      <CustomerManagement
+        blacklistEnabled={data.features.customerBlacklist}
+        canManage={can("customer.manage")}
+        canReadSensitive={can("customer.sensitive.read")}
+        currency={data.stats.currency}
+        customerTags={data.customerTags}
+        customers={data.customers}
+        depositsEnabled={data.features.deposits}
+        isSubmitting={isSubmitting}
+        scope={scope}
+        timezone={data.location.timezone}
+        onCreateCustomer={createCustomer}
+        onCreateNote={createCustomerNote}
+        onCreateTag={createCustomerTag}
+        onSetTag={setCustomerTag}
+        onUpdateCustomer={updateCustomer}
+      />
     );
   }
 
@@ -2626,14 +2726,6 @@ export function MerchantWorkspace({
   }
 
   function renderSettings(): ReactNode {
-    const notificationChannels = ["LINE", "EMAIL", "SMS"] as const;
-    const integrationByChannel = new Map(
-      data.notificationIntegrations.map((integration) => [
-        integration.channel,
-        integration,
-      ]),
-    );
-
     async function saveOrganizationProfile(
       event: FormEvent<HTMLFormElement>,
     ): Promise<void> {
@@ -2692,6 +2784,14 @@ export function MerchantWorkspace({
           form.get("depositPercentage") ??
             data.bookingSettings.depositPercentage,
         ),
+        customerCancellationEnabled:
+          form.get("customerCancellationEnabled") === "on",
+        customerRescheduleEnabled:
+          form.get("customerRescheduleEnabled") === "on",
+        cancellationCutoffHours: Number(
+          form.get("cancellationCutoffHours") ??
+            data.bookingSettings.cancellationCutoffHours,
+        ),
       };
       setIsSubmitting(true);
       setError(null);
@@ -2718,7 +2818,7 @@ export function MerchantWorkspace({
               : item,
           ),
         }));
-        setFeedback("預約與訂金設定已更新。");
+        setFeedback("預約規則與訂金設定已更新。");
       } catch (cause) {
         setError(
           cause instanceof Error ? cause.message : "預約設定更新失敗。",
@@ -2865,7 +2965,7 @@ export function MerchantWorkspace({
         <section className="border-y border-slate-200 bg-white px-5 py-6">
           <div className="flex items-center gap-2">
             <BadgeDollarSign aria-hidden="true" className="h-5 w-5 text-teal" />
-            <h2 className="font-semibold text-ink">預約與訂金</h2>
+            <h2 className="font-semibold text-ink">預約規則與訂金</h2>
           </div>
           <form
             className="mt-5 grid gap-5 sm:grid-cols-2"
@@ -2888,6 +2988,52 @@ export function MerchantWorkspace({
                 type="checkbox"
               />
             </label>
+            <label className="flex min-h-14 items-center justify-between gap-4 border-b border-slate-100 pb-4 sm:col-span-2">
+              <span>
+                <span className="block text-sm font-semibold text-ink">
+                  允許顧客自行取消
+                </span>
+                <span className="mt-1 block text-xs text-slate-500">
+                  顧客可從安全預約連結送出取消
+                </span>
+              </span>
+              <input
+                className="h-5 w-5 accent-teal"
+                defaultChecked={
+                  data.bookingSettings.customerCancellationEnabled
+                }
+                disabled={!can("location.manage") || isSubmitting}
+                name="customerCancellationEnabled"
+                type="checkbox"
+              />
+            </label>
+            <label className="flex min-h-14 items-center justify-between gap-4 border-b border-slate-100 pb-4 sm:col-span-2">
+              <span>
+                <span className="block text-sm font-semibold text-ink">
+                  允許顧客自行改期
+                </span>
+                <span className="mt-1 block text-xs text-slate-500">
+                  已收款預約仍須由店家協助處理
+                </span>
+              </span>
+              <input
+                className="h-5 w-5 accent-teal"
+                defaultChecked={data.bookingSettings.customerRescheduleEnabled}
+                disabled={!can("location.manage") || isSubmitting}
+                name="customerRescheduleEnabled"
+                type="checkbox"
+              />
+            </label>
+            <Field
+              defaultValue={String(
+                data.bookingSettings.cancellationCutoffHours,
+              )}
+              label="免費取消期限（預約前小時）"
+              max="720"
+              min="0"
+              name="cancellationCutoffHours"
+              type="number"
+            />
             <label className="flex min-h-14 items-center justify-between gap-4 border-b border-slate-100 pb-4 sm:col-span-2">
               <span>
                 <span className="block text-sm font-semibold text-ink">
@@ -2988,100 +3134,14 @@ export function MerchantWorkspace({
           </section>
         </div>
 
-        <section>
-          <div className="mb-3 flex items-center gap-2">
-            <Bell aria-hidden="true" className="h-5 w-5 text-teal" />
-            <h2 className="font-semibold text-ink">通知通道</h2>
-          </div>
-          <div className="grid gap-px overflow-hidden border-y border-slate-200 bg-slate-200 sm:grid-cols-3">
-            {notificationChannels.map((channel) => {
-              const integration = integrationByChannel.get(channel);
-              const active = integration?.status === "ACTIVE";
-              return (
-                <div className="bg-white px-5 py-4" key={channel}>
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-ink">{channel}</p>
-                    <span
-                      className={`rounded-md px-2 py-1 text-xs font-semibold ${
-                        active
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      {active ? "已啟用" : "未啟用"}
-                    </span>
-                  </div>
-                  {integration?.lastErrorCode ? (
-                    <p className="mt-2 break-all text-xs text-red-600">
-                      {integration.lastErrorCode}
-                    </p>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section>
-          <h2 className="mb-3 font-semibold text-ink">最近通知結果</h2>
-          {data.notificationDeliveries.length === 0 ? (
-            <EmptyState
-              title="尚未有通知紀錄"
-              body="目前沒有可顯示的通知結果。"
-            />
-          ) : (
-            <div className="overflow-x-auto border-y border-slate-200 bg-white">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">時間</th>
-                    <th className="px-4 py-3 font-medium">事件</th>
-                    <th className="px-4 py-3 font-medium">通道</th>
-                    <th className="px-4 py-3 font-medium">結果</th>
-                    <th className="px-4 py-3 font-medium">錯誤碼</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {data.notificationDeliveries.map((delivery) => (
-                    <tr key={delivery.id}>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {new Intl.DateTimeFormat("zh-TW", {
-                          timeZone: data.location.timezone,
-                          month: "numeric",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          hour12: false,
-                        }).format(new Date(delivery.createdAt))}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-ink">
-                        {notificationEventLabels[delivery.eventType] ??
-                          delivery.eventType}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {delivery.channel}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`rounded-md px-2 py-1 text-xs font-semibold ${
-                            deliveryStatusClasses[delivery.status] ??
-                            "bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {deliveryStatusLabels[delivery.status] ??
-                            delivery.status}
-                        </span>
-                      </td>
-                      <td className="max-w-56 break-all px-4 py-3 text-xs text-slate-500">
-                        {delivery.errorCode ?? "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+        <NotificationHealthPanel
+          deliveries={data.notificationDeliveries}
+          health={data.notificationHealth}
+          integrations={data.notificationIntegrations}
+          isSubmitting={isSubmitting}
+          timezone={data.location.timezone}
+          onRetry={retryNotification}
+        />
       </div>
     );
   }
@@ -3246,14 +3306,14 @@ export function MerchantWorkspace({
 
         <main
           id="main-content"
-          className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:py-8"
+          className="mx-auto max-w-[1500px] px-3 py-4 sm:px-6 sm:py-6 lg:py-8"
         >
-          <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-4 sm:mb-6">
             <div>
               <p className="text-xs font-semibold text-teal">
                 {data.organization.name}
               </p>
-              <h1 className="mt-1 text-2xl font-semibold text-ink">
+              <h1 className="mt-1 text-xl font-semibold text-ink sm:text-2xl">
                 {viewTitles[activeView]}
               </h1>
             </div>
@@ -3348,6 +3408,7 @@ function Field({
   type = "text",
   required = false,
   min,
+  max,
   wide = false,
   value,
   defaultValue,
@@ -3359,6 +3420,7 @@ function Field({
   type?: string;
   required?: boolean;
   min?: string;
+  max?: string;
   wide?: boolean;
   value?: string;
   defaultValue?: string;
@@ -3370,6 +3432,7 @@ function Field({
       <span className="text-sm font-medium text-slate-700">{label}</span>
       <input
         className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 outline-none focus:border-teal"
+        max={max}
         min={min}
         name={name}
         defaultValue={defaultValue}

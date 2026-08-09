@@ -43,10 +43,34 @@ export function formatLocalDate(
   return `${parts.year}/${parts.month}/${parts.day}`;
 }
 
+export function formatLocalDateKey(
+  value: string | Date,
+  timeZone = "Asia/Taipei",
+): string {
+  const parts = dateParts(value, timeZone, false);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
 export function formatLocalDateTime(
   value: string | Date,
   timeZone = "Asia/Taipei",
 ): string {
   const parts = dateParts(value, timeZone, true);
   return `${parts.year}/${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+export function formatLocalMonthDayTime(
+  value: string | Date,
+  timeZone = "Asia/Taipei",
+): string {
+  const parts = dateParts(value, timeZone, true);
+  return `${Number(parts.month)}/${Number(parts.day)} ${parts.hour}:${parts.minute}`;
+}
+
+export function formatLocalTime(
+  value: string | Date,
+  timeZone = "Asia/Taipei",
+): string {
+  const parts = dateParts(value, timeZone, true);
+  return `${parts.hour}:${parts.minute}`;
 }

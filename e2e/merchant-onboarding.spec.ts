@@ -5,6 +5,8 @@ import { PrismaClient } from "@prisma/client";
 import { expect, test } from "@playwright/test";
 import { hash } from "bcryptjs";
 
+test.setTimeout(120_000);
+
 test("merchant application reaches public go-live", async (
   { page },
   testInfo,

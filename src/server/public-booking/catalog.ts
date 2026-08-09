@@ -30,6 +30,8 @@ export type PublicCatalog = {
     currency: string;
     maximumAdvanceDays: number;
     minimumLeadMinutes: number;
+    customerCancellationEnabled: boolean;
+    customerRescheduleEnabled: boolean;
     coverImageUrl: string | null;
   };
   businessHours: Array<{
@@ -57,6 +59,13 @@ export type PublicCatalog = {
       durationMinutes: number;
       priceMinor: number;
       depositMinor: number;
+      cancellationPolicy: {
+        name: string;
+        freeCancellationHours: number;
+        lateFeeMode: "NONE" | "FIXED" | "PERCENTAGE" | "DEPOSIT_FORFEIT";
+        lateFeeFixedMinor: number | null;
+        lateFeePercentage: number | null;
+      };
       staff: Array<{
         id: string;
         displayName: string;
@@ -81,7 +90,7 @@ export async function getPublicCatalog(
 const getCachedPublicCatalogBySlug = unstable_cache(
   async (organizationSlug: string, locationSlug: string) =>
     getPublicCatalog({ organizationSlug, locationSlug }),
-  ["public-booking-catalog-v2"],
+  ["public-booking-catalog-v3"],
   {
     revalidate: 30,
     tags: ["public-booking-catalog"],
@@ -122,6 +131,21 @@ export async function getPublicCatalogForContext(
           maximum_advance_days: true,
           minimum_lead_minutes: true,
           deposits_enabled: true,
+          customer_cancellation_enabled: true,
+          customer_reschedule_enabled: true,
+        },
+      },
+      cancellation_policies: {
+        where: {
+          is_active: true,
+        },
+        select: {
+          service_variant_id: true,
+          name: true,
+          free_cancellation_hours: true,
+          late_fee_mode: true,
+          late_fee_fixed_minor: true,
+          late_fee_percentage: true,
         },
       },
       deposit_policies: {
@@ -261,6 +285,13 @@ export async function getPublicCatalogForContext(
       location.deposit_policies.find(
         (policy) => policy.service_variant_id === null,
       );
+    const cancellationPolicy =
+      location.cancellation_policies.find(
+        (policy) => policy.service_variant_id === variant.id,
+      ) ??
+      location.cancellation_policies.find(
+        (policy) => policy.service_variant_id === null,
+      );
     const depositsEnabled =
       location.location_booking_policies?.deposits_enabled ?? false;
     const depositMinor = depositsEnabled
@@ -307,6 +338,19 @@ export async function getPublicCatalogForContext(
         item.duration_override_minutes ?? variant.duration_minutes,
       priceMinor,
       depositMinor,
+      cancellationPolicy: {
+        name: cancellationPolicy?.name ?? "一般取消規則",
+        freeCancellationHours:
+          cancellationPolicy?.free_cancellation_hours ?? 24,
+        lateFeeMode: cancellationPolicy?.late_fee_mode ?? "NONE",
+        lateFeeFixedMinor:
+          cancellationPolicy?.late_fee_fixed_minor ?? null,
+        lateFeePercentage:
+          cancellationPolicy?.late_fee_percentage !== null &&
+          cancellationPolicy?.late_fee_percentage !== undefined
+            ? Number(cancellationPolicy.late_fee_percentage)
+            : null,
+      },
       staff: item.service_staff_assignments.map(({ staff_profiles }) => ({
         id: staff_profiles.id,
         displayName: staff_profiles.display_name,
@@ -339,6 +383,12 @@ export async function getPublicCatalogForContext(
         location.location_booking_policies?.maximum_advance_days ?? 60,
       minimumLeadMinutes:
         location.location_booking_policies?.minimum_lead_minutes ?? 60,
+      customerCancellationEnabled:
+        location.location_booking_policies
+          ?.customer_cancellation_enabled ?? true,
+      customerRescheduleEnabled:
+        location.location_booking_policies?.customer_reschedule_enabled ??
+        true,
       coverImageUrl: publicMediaUrl(location.cover_image_path),
     },
     businessHours: location.location_business_hours.map((hours) => ({

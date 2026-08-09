@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BriefcaseBusiness,
   ClipboardList,
   Eye,
   EyeOff,
@@ -29,6 +30,10 @@ const testAccounts = {
   },
   customer: {
     email: "customer@lumi.test",
+    password: "Beauty123!",
+  },
+  provider: {
+    email: "provider@lumi.test",
     password: "Beauty123!",
   },
   applicant: {
@@ -121,7 +126,7 @@ export function LoginForm({
       </p>
 
       {localAuthEnabled ? (
-        <div className="mt-7 grid gap-3 sm:grid-cols-3">
+        <div className="mt-7 grid grid-cols-2 gap-3">
           <button
             className="flex min-h-20 items-center gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:cursor-wait disabled:opacity-60"
             disabled={!isHydrated}
@@ -138,6 +143,28 @@ export function LoginForm({
               </span>
               <span className="mt-1 block text-xs text-slate-500">
                 營運後台
+              </span>
+            </span>
+          </button>
+          <button
+            className="flex min-h-20 items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-3 text-left transition hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:cursor-wait disabled:opacity-60 sm:px-4"
+            disabled={!isHydrated}
+            type="button"
+            onClick={() => {
+              setEmail(testAccounts.provider.email);
+              setPassword(testAccounts.provider.password);
+            }}
+          >
+            <BriefcaseBusiness
+              aria-hidden="true"
+              className="h-5 w-5 shrink-0 text-blue-600"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-ink">
+                員工測試
+              </span>
+              <span className="mt-1 block text-xs text-slate-500">
+                個人班表
               </span>
             </span>
           </button>

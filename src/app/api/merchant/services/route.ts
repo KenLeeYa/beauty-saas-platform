@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 
 import {
   assertSessionCsrf,
@@ -9,11 +10,12 @@ import { resolveMerchantContext } from "@/server/merchant/context";
 import {
   createMerchantService,
   setMerchantServiceOnline,
+  updateMerchantServiceBuffers,
 } from "@/server/merchant/management";
 import {
   createMerchantServiceSchema,
   merchantScopeSchema,
-  merchantServiceToggleSchema,
+  merchantServiceUpdateSchema,
 } from "@/server/merchant/schemas";
 import { getRequestId } from "@/server/security/request";
 
@@ -38,8 +40,14 @@ export async function POST(request: NextRequest) {
     const input = createMerchantServiceSchema.parse(
       await request.json(),
     );
+    const result = await createMerchantService({
+      context,
+      ...input,
+      requestId,
+    });
+    revalidateTag("public-booking-catalog", { expire: 0 });
     return jsonSuccess(
-      await createMerchantService({ context, ...input, requestId }),
+      result,
       { status: 201, headers: { "x-request-id": requestId } },
     );
   } catch (error) {
@@ -51,15 +59,23 @@ export async function PATCH(request: NextRequest) {
   const requestId = getRequestId(request);
   try {
     const context = await requestContext(request);
-    const input = merchantServiceToggleSchema.parse(
+    const input = merchantServiceUpdateSchema.parse(
       await request.json(),
     );
+    const result = "action" in input
+      ? await updateMerchantServiceBuffers({
+          context,
+          ...input,
+          requestId,
+        })
+      : await setMerchantServiceOnline({
+          context,
+          ...input,
+          requestId,
+        });
+    revalidateTag("public-booking-catalog", { expire: 0 });
     return jsonSuccess(
-      await setMerchantServiceOnline({
-        context,
-        ...input,
-        requestId,
-      }),
+      result,
       { headers: { "x-request-id": requestId } },
     );
   } catch (error) {
