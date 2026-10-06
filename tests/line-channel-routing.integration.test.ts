@@ -23,6 +23,14 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)(
       const organizationId='11111111-1111-4111-8111-111111111111';
       const locationId='22222222-2222-4222-8222-222222222221';
       const organization=await prisma.organizations.findUniqueOrThrow({where:{id:organizationId},select:{slug:true}});
+      await prisma.$executeRaw(Prisma.sql`
+        insert into public.mobile_store_entries
+          (organization_id, location_id, entry_slug, is_enabled)
+        values (${organizationId}::uuid, ${locationId}::uuid,
+          'synthetic-beauty-line', true)
+        on conflict (organization_id, location_id)
+        do update set is_enabled=true
+      `);
       await prisma.notification_integrations.upsert({where:{organization_id_channel:{organization_id:organizationId,channel:'LINE'}},
         create:{organization_id:organizationId,channel:'LINE',status:'ACTIVE'},update:{status:'ACTIVE'}});
       await prisma.$executeRaw(Prisma.sql`

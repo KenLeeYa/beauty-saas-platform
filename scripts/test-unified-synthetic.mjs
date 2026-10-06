@@ -31,6 +31,8 @@ const tests = [
   "tests/attendance.integration.test.ts",
   "tests/payroll-period.integration.test.ts",
   "tests/operations-access.integration.test.ts",
+  "tests/entry-rollback.integration.test.ts",
+  "tests/tenant-isolation.integration.test.ts",
 ];
 const vitest = fileURLToPath(new URL("../node_modules/vitest/vitest.mjs", import.meta.url));
 const run = spawnSync(process.execPath, [vitest, "run", "--no-file-parallelism", ...tests], {

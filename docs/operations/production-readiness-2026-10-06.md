@@ -50,6 +50,29 @@ production table names. Column signatures match for 82 existing tables; the
 expected exception is `service_staff_assignments`, which gains the three
 capability-term columns. The fresh rehearsal has 119 `public` tables, including
 `line_desktop_sessions`.
+
+An additional fresh local database (`beauty_unified_rehearsal_20261006_v12`)
+used [synthetic aggregate-shaped fixtures](../../tests/fixtures/production-aggregate-shape.sql)
+before applying all 17 candidate migrations. Read-only production aggregates,
+without identifiers or customer values, show one completed `ONLINE` test
+booking, 20 historical holds (14 expired, five cancelled, one confirmed),
+19 nonblocking staff and resource allocations attached to holds, one active
+owner membership across locations, one active service-provider location
+membership, and two active staff profiles. The fixture reproduces the hold
+status and historical allocation pattern with invented values; the baseline
+synthetic seed deliberately has more bookings and customers to exercise other
+flows. The full 13-baseline-plus-17-candidate migration sequence passed on
+this fixture. Afterward, all 83 production table names remained present and
+82 column signatures still matched; `service_staff_assignments` is the expected
+additive exception. The local integrated suite passed 25 tests in 24 files,
+including booking/resource contention, manual booking, cancellation,
+rescheduling, role and cross-tenant access, LINE identity, and hiding the new
+entry without deleting bookings.
+Read-only system-catalog comparison also found all 627 current production
+constraint, RLS policy, and noninternal trigger **names** on the local
+post-migration schema (924 total local items). This checks preservation of
+existing objects by name, not equality of every policy expression or behavior.
+
 This is structurally representative but still not a restored, scrubbed production
 snapshot; restore behavior, data distributions, triggers, policies, and
 live-record migration behavior remain to be checked before cloud writes.
@@ -102,14 +125,49 @@ matching email alone; an existing owner who has not linked Google must continue
 using an already verified sign-in method until an authenticated linking flow is
 available. Do not disable the existing method during rollout.
 
-The requested new Official Account name is **KuanBook 預約**. Creating that
-account and its LINE Login channel in the user's LINE Business account remains
-an external activation step; no account, channel, credential, callback, rich
-menu, or customer message was created by this repository change. Select the
-intended LINE provider before enabling Messaging API because provider choice
-is persistent. Record the exact channel ID, provider ID, secret, and callback
-only through approved server-side configuration. The code's synthetic channel
-and token responses are local test fixtures, not a live LINE integration.
+Read-only production metadata shows the Vercel production environment has
+`NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED`, `NEXT_PUBLIC_SUPABASE_URL`, and
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` keys, without reading their values.
+Supabase Auth currently has four `email` identities and no Google identity;
+all four app profiles have `auth_user_id`, and no app profile has a local
+`password_hash`. The production password route uses Supabase Auth, so this
+does not prove password login is disabled. Google provider activation, redirect
+allowlist, the flag's value, and an existing owner's first Google login remain
+unverified. Verify these with a test owner before any login-method cutover.
+
+LINE activation needs two same-provider channel references in
+`store_line_channels`: one `LOGIN` channel ID and one `MESSAGING` channel ID,
+each with the actual provider ID and store location. The server needs
+`LINE_BOOKING_CHANNEL_SECRETS_JSON` for OAuth/token and webhook verification;
+outbound messaging additionally needs
+`LINE_BOOKING_CHANNEL_ACCESS_TOKENS_JSON` and an enabled notification provider.
+The existing callback is saved as
+`https://book.kuanguard.com/api/line-booking/callback`. Set
+`NEXT_PUBLIC_APP_URL` and `PUBLIC_APP_ORIGINS` to that canonical origin, and
+create the disabled `mobile_store_entries` row before enabling the store entry.
+The current production Vercel environment metadata has neither LINE JSON key.
+Do not place credentials in SQL, source, browser logs, or this document.
+For an initial login-only test, the user should enter
+`LINE_BOOKING_CHANNEL_SECRETS_JSON` directly in the **Production** environment
+of Vercel project `beauty-saas-platform` as a JSON object whose key is LINE
+Login channel ID `2011887008` and whose value is that channel's secret.
+No Messaging API access token is required for login. Before enabling incoming
+Messaging webhooks, add channel ID `2011886962` with its own channel secret to
+the same JSON. Outbound LINE notifications separately require the Messaging
+channel access token in `LINE_BOOKING_CHANNEL_ACCESS_TOKENS_JSON`, plus the
+existing `NOTIFICATION_PROVIDER=line` setting; leave this off for login-only
+testing. The two channel IDs and provider ID are nonsecret configuration
+references and must be recorded in `store_line_channels` only after the schema
+migration. The disabled entry row can be prepared without exposing booking.
+
+The user-authorized LINE setup created provider `2005605742`, **KuanBook 預約**
+Official Account `@622fexlw`, Messaging API channel `2011886962`, and LINE
+Login channel `2011887008` under that provider. The callback saved in LINE
+Developers is `https://book.kuanguard.com/api/line-booking/callback`.
+The LINE Login channel is still in Developing status. No channel secrets or
+long-lived Messaging API token were copied into this repository or Vercel.
+The code's synthetic channel and token responses remain local fixtures; live
+LINE login, webhook receipt, and outbound delivery have not been verified.
 
 No production migration, deployment, DNS mapping, LINE credential, callback,
 marketing send, payment or payroll setting was changed in this inspection.
