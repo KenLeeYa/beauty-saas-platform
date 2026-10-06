@@ -1,5 +1,30 @@
 # Production readiness, 2026-10-06
 
+## Later status update, 2026-10-06
+
+This update supersedes the initial inspection status and release gates below.
+The 17 integrated `20261005*` migrations were applied to
+`beauty-saas-production` with the repository version IDs preserved; the linked
+history now has 30 versions, ending `20261005030500`. Read-only postchecks
+found unchanged counts for existing bookings, holds, customers, staff, and
+Storage objects. The new required service-staff assignment fields have no
+null values. See [the application record](migration-apply-checklist.md).
+
+The isolated test-store entry `preview-line-pilot` and both LINE channel
+references were created and verified disabled. The user entered the LINE Login
+channel secret directly into the existing Beauty Vercel project's Production
+environment; its value was never read or copied. The LINE callback was saved
+in LINE Developers. The prior statements below that no migration, LINE config,
+or callback exists describe the earlier inspection and are now historical.
+
+The Beauty application has not yet been deployed, and `book.kuanguard.com` is
+not yet bound or resolvable. The current production booking entry is disabled.
+Before changing exposure, verify authenticated owner login after the schema
+change, preserve the prior deployment ID for rollback, deploy to the exact
+Beauty project ID `prj_S8ryMyEGjyenihjsJTU8QZqAUI2I`, check existing login
+and old booking routes, configure the canonical app origin and only the `book`
+DNS record, then enable the single test entry for a controlled live test.
+
 ## Decision
 
 Do not publish the integrated candidate or apply its migrations to the existing
