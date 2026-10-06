@@ -74,20 +74,23 @@ post-migration schema (924 total local items). This checks preservation of
 existing objects by name, not equality of every policy expression or behavior.
 
 This is structurally representative but still not a restored, scrubbed production
-snapshot; restore behavior, data distributions, triggers, policies, and
-live-record migration behavior remain to be checked before cloud writes.
+snapshot. A restored copy would chiefly measure restore duration and expose
+unobserved row-value or environment assumptions. Given the small production
+dataset and the additive migrations, it is a preferred extra check for a broad
+release, not an automatic prerequisite to a bounded single-store pilot.
+
 ## Release sequence once gates are satisfied
 
-1. Record the most recent listed restore point and make a scrubbed
-   production-shaped copy. A listed backup is not a restore test. Do not restore
+1. Record the most recent listed restore point. If a no-cost scrubbed
+   production-shaped copy is available, rehearse all 17 migrations on it;
+   otherwise use the aggregate-shaped rehearsal above and limit exposure to
+   a single test store until the live smoke checks pass. A listed backup is not
+   a restore test. Do not restore
    the production project merely to test the backup: Supabase says restoration
    makes the project inaccessible during the operation and rolls data back.
    Preserve Storage objects separately; the database backup does not contain
-   their bytes.
-   Rehearse only the 17 integrated `20261005*` migrations there, including row
-   counts, existing merchant booking flows, RLS, and rollback by disabling the
-   new entry. The two older `20261004*` prototype migrations were moved to the
-   recoverable local archive and must never be applied to production.
+   their bytes. The two older `20261004*` prototype migrations were moved to
+   the recoverable local archive and must never be applied to production.
 2. Validate one isolated test merchant and test member, or an equivalent
    tenant-isolated dataset. Do not send marketing to existing customers. Keep
    `MEMBER_VALUE_TEST_ONLY`, `PAYROLL_TEST_ONLY`, real payment and wage posting
@@ -97,8 +100,8 @@ live-record migration behavior remain to be checked before cloud writes.
    exact Vercel value returned for this project. Because custom domains bypass
    the project's current SSO setting, confirm the intended access protection
    before this step. Do not change any other `kuanguard.com` record. The user
-   approved a public login endpoint, but deployment still depends on the
-   production-shaped migration rehearsal and configured authentication.
+   approved a public login endpoint, but deployment still depends on
+   configured authentication and a passing protected pilot.
 4. Set the single canonical `NEXT_PUBLIC_APP_URL` to
    `https://book.kuanguard.com` and allow that origin in `PUBLIC_APP_ORIGINS`.
    LINE Login authorizes and exchanges the code using
@@ -128,12 +131,13 @@ available. Do not disable the existing method during rollout.
 Read-only production metadata shows the Vercel production environment has
 `NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED`, `NEXT_PUBLIC_SUPABASE_URL`, and
 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` keys, without reading their values.
-Supabase Auth currently has four `email` identities and no Google identity;
+The Supabase Google provider is enabled, as verified in the authenticated
+dashboard. Supabase Auth currently has four `email` identities and no Google identity;
 all four app profiles have `auth_user_id`, and no app profile has a local
 `password_hash`. The production password route uses Supabase Auth, so this
-does not prove password login is disabled. Google provider activation, redirect
-allowlist, the flag's value, and an existing owner's first Google login remain
-unverified. Verify these with a test owner before any login-method cutover.
+does not prove password login is disabled. The redirect allowlist, Vercel
+flag's value, and an existing owner's first Google login remain unverified.
+Verify these with a test owner before any login-method cutover.
 
 LINE activation needs two same-provider channel references in
 `store_line_channels`: one `LOGIN` channel ID and one `MESSAGING` channel ID,
