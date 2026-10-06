@@ -11,7 +11,7 @@ not an active endpoint.
 
 - Supabase project `beauty-saas-production` (`dfuhylsmhrysbmhpeylx`) is healthy.
   Read-only counts: 1 organization, 1 location, 1 booking, 1 customer and 2 staff.
-  The production migration history ends at `20260806033307`; none of the 16
+  The production migration history ends at `20260806033307`; none of the 17
   `20261005*` integrated migrations is installed. `store_line_channels`,
   `mobile_store_entries`, and `line_oauth_states` are absent.
 - Existing Vercel project `beauty-saas-platform`
@@ -26,9 +26,16 @@ not an active endpoint.
   nameservers are Cloudflare (`liv.ns.cloudflare.com`, `sri.ns.cloudflare.com`).
   A public DNS query finds no `book.kuanguard.com` record, and that hostname is
   not bound to the Beauty Vercel project. No unrelated DNS record was changed.
-- The Supabase organization is on the Pro plan, which documents scheduled backups, but an actual recoverable production restore point could not be verified with the
-  available tools. A supported fresh Edge session opened the scheduled-backups URL but redirected to the Supabase sign-in page (HTTP 200); no restore-point metadata was visible. The candidate migrations were tested against an empty local
-  synthetic database, not a scrubbed copy of the existing production schema.
+- An authenticated read-only view of [Scheduled Backups](https://supabase.com/dashboard/project/dfuhylsmhrysbmhpeylx/database/backups/scheduled)
+  shows seven daily **PHYSICAL** backups through 2026-10-05 22:03:46 UTC;
+  each has a Restore control. This verifies listed restore points, not a tested
+  restore. The candidate migrations were tested against local synthetic data,
+  not a scrubbed copy of the existing production data.
+- Read-only counts on 2026-10-06 found two Storage buckets, zero Storage
+  objects, and zero `customer_media` rows. [Supabase database backups](https://supabase.com/docs/guides/platform/backups)
+  cover Storage metadata but **exclude object contents**. Inventory and preserve
+  Storage separately before any restore or migration that touches attachments;
+  recheck counts immediately before release because content can change.
 
 ## Expanded no-PII migration rehearsal
 
@@ -44,11 +51,16 @@ expected exception is `service_staff_assignments`, which gains the three
 capability-term columns. The fresh rehearsal has 119 `public` tables, including
 `line_desktop_sessions`.
 This is structurally representative but still not a restored, scrubbed production
-snapshot; actual backup availability, data distributions, triggers, policies,
-and live-record migration behavior remain to be checked before cloud writes.
+snapshot; restore behavior, data distributions, triggers, policies, and
+live-record migration behavior remain to be checked before cloud writes.
 ## Release sequence once gates are satisfied
 
-1. Verify an available restore point and make a scrubbed production-shaped copy.
+1. Record the most recent listed restore point and make a scrubbed
+   production-shaped copy. A listed backup is not a restore test. Do not restore
+   the production project merely to test the backup: Supabase says restoration
+   makes the project inaccessible during the operation and rolls data back.
+   Preserve Storage objects separately; the database backup does not contain
+   their bytes.
    Rehearse only the 17 integrated `20261005*` migrations there, including row
    counts, existing merchant booking flows, RLS, and rollback by disabling the
    new entry. The two older `20261004*` prototype migrations were moved to the
@@ -61,7 +73,9 @@ and live-record migration behavior remain to be checked before cloud writes.
    Beauty Vercel project and add only the `book` CNAME in Cloudflare using the
    exact Vercel value returned for this project. Because custom domains bypass
    the project's current SSO setting, confirm the intended access protection
-   before this step. Do not change any other `kuanguard.com` record.
+   before this step. Do not change any other `kuanguard.com` record. The user
+   approved a public login endpoint, but deployment still depends on the
+   production-shaped migration rehearsal and configured authentication.
 4. Set the single canonical `NEXT_PUBLIC_APP_URL` to
    `https://book.kuanguard.com` and allow that origin in `PUBLIC_APP_ORIGINS`.
    LINE Login authorizes and exchanges the code using
