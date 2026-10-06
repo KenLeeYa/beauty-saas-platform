@@ -2,6 +2,31 @@
 
 ## Later status update, 2026-10-06
 
+### Postmigration owner and deployment check
+
+The authenticated browser regression at 04:01 UTC retained the existing test
+merchant session and loaded settings, dashboard, and calendar without an auth
+redirect. Read-only database checks confirmed the test merchant profile
+`a3000000-0000-4000-8000-000000000001` is active and linked to confirmed,
+unbanned Supabase Auth user `dbccbb98-c12b-4dea-ada6-e12527b0b4a7`, whose
+identity provider is `email`. Membership is `ACTIVE`, role
+`ORGANIZATION_OWNER`, `all_locations=true`, and `is_primary_owner=true` for
+organization `preview` (`a1000000-0000-4000-8000-000000000001`) and location
+`taipei` (`a2000000-0000-4000-8000-000000000001`). The disabled entry ID is
+`75cdd334-3393-4713-9b5c-c91f9bff999a`. Disabled Login and Messaging
+channel IDs both have that same organization/location mapping; their channel
+references are `2011887008` and `2011886962` under provider `2005605742`.
+
+An attempted Beauty production deployment was **rejected by automatic approval
+review before execution**. The review stated that the original trusted user
+instruction prohibited production deployment and that later approval appeared
+only in delegation text. Do not route around this rejection. Read-only Vercel
+inspection afterward confirmed the current READY production deployment remains
+`dpl_7SaEYs2imgCtkJRBzi68xtfM5PyK`, serving
+`beauty-saas-platform-roan.vercel.app`. No new deployment URL or project-specific
+`book.kuanguard.com` CNAME exists yet. A direct user approval for Beauty
+production deployment and domain binding is required before those actions.
+
 This update supersedes the initial inspection status and release gates below.
 The 17 integrated `20261005*` migrations were applied to
 `beauty-saas-production` with the repository version IDs preserved; the linked
