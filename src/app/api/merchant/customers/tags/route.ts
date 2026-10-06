@@ -11,6 +11,7 @@ import {
 } from "@/server/auth/session";
 import { jsonError, jsonSuccess } from "@/server/http/response";
 import { resolveMerchantContext } from "@/server/merchant/context";
+import { requireModule } from "@/server/entitlements/module-visibility";
 import { merchantScopeSchema } from "@/server/merchant/schemas";
 import { getRequestId } from "@/server/security/request";
 
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
       organizationSlug: scope.organization,
       locationSlug: scope.location,
     });
+    await requireModule(context,"CUSTOMER_CRM");
     const command = customerTagCommandSchema.parse(await request.json());
 
     const result =

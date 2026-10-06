@@ -7,6 +7,7 @@ import {
 import type { OrganizationContext } from "../authorization/context";
 import { prisma } from "../database/prisma";
 import { getEntitlement } from "../entitlements/service";
+import { canShowModule } from "../entitlements/module-visibility";
 import { requireLocation } from "../authorization/context";
 import { publicMediaUrl } from "../storage/provider";
 import {
@@ -907,6 +908,7 @@ export async function getMerchantWorkspaceData(
     ]),
   );
 
+  const crmVisible=await canShowModule(context,"CUSTOMER_CRM");
   return {
     session: {
       displayName: context.session.displayName,
@@ -1023,12 +1025,12 @@ export async function getMerchantWorkspaceData(
       kind: resource.resource_types.kind,
       isActive: resource.is_active,
     })),
-    customerTags: customerTagRecords.map((tag) => ({
+    customerTags: customerTagRecords.filter(()=>crmVisible).map((tag) => ({
       id: tag.id,
       name: tag.name,
       color: tag.color,
     })),
-    customers: customerRecords.map((customer) => ({
+    customers: customerRecords.filter(()=>crmVisible).map((customer) => ({
       id: customer.id,
       displayName: customer.display_name,
       phone: canReadSensitiveCustomers

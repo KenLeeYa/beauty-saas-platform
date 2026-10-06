@@ -7,7 +7,7 @@ import type {
 } from "@prisma/client";
 
 import { prisma } from "../database/prisma";
-import { getNotificationAdapter } from "./adapters";
+import { getNotificationAdapterForLocation } from "./adapters";
 import {
   renderNotification,
   retryDelayMilliseconds,
@@ -161,11 +161,11 @@ function isIntegrationActive(
   );
 }
 
-function disabledCode(input: {
+  async function disabledCode(input: {
   record: DeliveryRecord;
   channel: notification_channel;
   address: string | null;
-}): string | null {
+  }): Promise<string | null> {
   if (!input.address) {
     return "NO_NOTIFICATION_RECIPIENT";
   }
@@ -173,7 +173,8 @@ function disabledCode(input: {
     return "NOTIFICATION_INTEGRATION_DISABLED";
   }
 
-  const adapter = getNotificationAdapter(input.channel);
+  const adapter = await getNotificationAdapterForLocation(input.channel,
+    input.record.organization_id,input.record.location_id);
   return adapter.configured
     ? null
     : (adapter.unavailableCode ?? "NOTIFICATION_PROVIDER_DISABLED");
@@ -322,7 +323,7 @@ export async function materializeNotificationJobs(): Promise<{
 
   for (const record of records) {
     const recipient = resolveRecipient(record);
-    const errorCode = disabledCode({
+    const errorCode = await disabledCode({
       record,
       channel: recipient.channel,
       address: recipient.address,
@@ -611,10 +612,10 @@ async function processRunnableJobs(
     const record = job.notification_outbox;
     const recipient = resolveRecipient(record);
     const attemptNumber = job.attempt_count + 1;
-    const errorCode =
-      recipient.channel !== job.channel
-        ? "RECIPIENT_CHANNEL_CHANGED"
-        : disabledCode({
+      const errorCode =
+        recipient.channel !== job.channel
+          ? "RECIPIENT_CHANNEL_CHANGED"
+          : await disabledCode({
             record,
             channel: job.channel,
             address: recipient.address,
@@ -642,7 +643,8 @@ async function processRunnableJobs(
       serviceName: segment?.service_name_snapshot ?? null,
       startsAt: segment?.starts_at ?? null,
     });
-    const adapter = getNotificationAdapter(job.channel);
+    const adapter = await getNotificationAdapterForLocation(job.channel,
+      record.organization_id,record.location_id);
 
     try {
       const result = await adapter.send({

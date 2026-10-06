@@ -53,6 +53,7 @@ function linkTokenFromEvent(event: LineWebhookEvent): string | null {
 
 async function linkLineCustomer(input: {
   organizationId: string;
+  providerId?: string;
   event: LineWebhookEvent;
   now: Date;
 }): Promise<"LINKED" | "RECORDED"> {
@@ -84,7 +85,8 @@ async function linkLineCustomer(input: {
 
     const providerUserHash = hmacSha256(
       env.TOKEN_DERIVATION_SECRET,
-      `line-user:${providerUserReference}`,
+      input.providerId ? `line-user:${input.providerId}:${providerUserReference}` :
+        `line-user:${providerUserReference}`,
     );
     await transaction.customer_contact_links.upsert({
       where: {
@@ -124,6 +126,7 @@ async function linkLineCustomer(input: {
 
 export async function processLineWebhook(input: {
   organizationSlug: string;
+  channelId?: string;
   body: string;
   signature: string;
   now?: Date;
@@ -149,11 +152,33 @@ export async function processLineWebhook(input: {
     },
   });
 
+  let channelSecret = env.LINE_CHANNEL_SECRET;
+  let providerId: string | undefined;
+  if (!input.channelId && integration) {
+    const active=await prisma.$queryRaw<{id:string}[]>(Prisma.sql`
+      select id from public.mobile_store_entries
+      where organization_id=${integration.organization_id}::uuid and is_enabled limit 1
+    `);
+    if (active.length) throw new AppError("FEATURE_UNAVAILABLE",
+      "Store-specific LINE webhook URL required",503);
+  }
+  if (input.channelId && integration) {
+    const rows=await prisma.$queryRaw<{providerId:string}[]>(Prisma.sql`
+      select provider_id as "providerId" from public.store_line_channels
+      where organization_id=${integration.organization_id}::uuid
+        and channel_id=${input.channelId}
+        and purpose='MESSAGING' and is_enabled limit 1
+    `);
+    providerId=rows[0]?.providerId;
+    const secrets=z.record(z.string(),z.string()).parse(JSON.parse(
+      process.env.LINE_BOOKING_CHANNEL_SECRETS_JSON || "{}") as unknown);
+    channelSecret=providerId ? (secrets[input.channelId] ?? "") : "";
+  }
   if (
     !integration ||
     env.NOTIFICATION_PROVIDER !== "line" ||
-    !env.LINE_CHANNEL_SECRET ||
-    !env.LINE_CHANNEL_ACCESS_TOKEN
+    !channelSecret ||
+    (!input.channelId && !env.LINE_CHANNEL_ACCESS_TOKEN)
   ) {
     throw new AppError(
       "FEATURE_UNAVAILABLE",
@@ -165,7 +190,7 @@ export async function processLineWebhook(input: {
   if (
     !verifyLineSignature({
       body: input.body,
-      secret: env.LINE_CHANNEL_SECRET,
+      secret: channelSecret,
       signature: input.signature,
     })
   ) {
@@ -180,7 +205,7 @@ export async function processLineWebhook(input: {
 
   for (const event of payload.events) {
     const eventHash = sha256(
-      `${integration.organization_id}:${
+      `${integration.organization_id}:${input.channelId ?? "legacy"}:${
         event.webhookEventId ?? JSON.stringify(event)
       }`,
     );
@@ -210,6 +235,7 @@ export async function processLineWebhook(input: {
 
       const outcome = await linkLineCustomer({
         organizationId: integration.organization_id,
+        providerId,
         event,
         now,
       });

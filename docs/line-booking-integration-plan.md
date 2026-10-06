@@ -1,0 +1,21 @@
+# LINE booking integration and activation
+
+Status: local candidate, 2026-10-05. No production schema, LINE channel, token, customer data or deployment was changed.
+
+## Existing system and authority
+
+The existing `public` tables remain the authority for organizations, locations, catalog, staff, resources, booking holds, bookings, allocations, policies and notification outbox. The merchant calendar and public booking page keep using the same tables. The new `/line-booking/{store}` mobile entry and its APIs resolve a configured location, then call the existing public catalog, availability and atomic hold/confirmation services. Staff phone and personal-LINE entries record the source in public bookings. Reschedule and cancel use the same public booking policy. The older `line_booking` schema is confined to the loopback synthetic trial by `prototype-guard.ts`; its data is not a production migration source.
+
+LINE identity uses a per-store login channel and a verified provider-scoped subject hash. Employee access requires a proved account and manager approval; a mobile session is revocable and tied to an active public booking session. A customer LINE login creates a separate customer when no explicit verified link exists. A matching phone number never merges identities automatically; booking that conflicts with an existing customer phone requires an explicit, separately designed account-link flow. A disabled or unconfigured per-store messaging channel cannot fall back to another store's credentials. Notification jobs remain in the existing outbox, so a delivery failure does not undo confirmation.
+
+## Migration strategy
+
+Apply `20261005000100_line_identity_links.sql` then `20261005000200_store_line_channels.sql` after backing up the production database and reviewing the current migration head. Both migrations are additive. They create identity, session, store entry, channel-reference and module-activation tables with row-level security; they do not copy, delete or rewrite existing bookings. Rehearse against a production-shaped, scrubbed snapshot and compare table counts, foreign keys, indexes, RLS roles and application startup before live use. Leave every new store entry and channel disabled until the matching server secrets, URLs and rollback are verified. Rollback of routing is to disable the mobile entry and restore the existing public booking link; keep new identity/event rows for audit rather than dropping them during an incident.
+
+Store setup requires a globally unique entry slug, a LINE Login channel provider ID/channel ID and approved per-store server secret mapping. Messaging uses a separate channel reference and server token mapping. The channel references contain no credentials. Configure rich-menu and beautician share URLs only after the store is active and verified; all point to the same store entry, with a staff preselection that the server revalidates. The source of truth remains the public calendar regardless of entry.
+
+## Local verification and current limits
+
+Synthetic PostgreSQL integration tests cover concurrent booking, manual phone entry, same-device and multi-device identity behavior, employee proof/approval/revocation, reschedule/cancel, scoped reads, webhook signature/channel routing and module guards. A 390px headless Edge flow completed a customer booking and cancellation against the integrated Next.js app using a mocked verified LINE identity. `npm run typecheck`, `npm run lint`, `npm test` and the full `npm run build` pass after stopping the task-owned local trial process during Prisma generation. No real LINE login, delivery or production migration has been tested.
+
+The wider operations roadmap is in [unified-beauty-operations.md](superpowers/plans/2026-10-05-unified-beauty-operations.md). The candidate now includes local implementations of effective-dated staff capability, unspecified-staff dispatch, CRM status rules, benefit policy and ledgers, attendance, and payroll shadow calculations. Paid member writes and payroll writes require explicit test-only environment gates; they are not activated for real stores. See [release runbook](operations/unified-booking-release.md) and [financial reconciliation](operations/financial-reconciliation.md). Do not infer production readiness from this local candidate.

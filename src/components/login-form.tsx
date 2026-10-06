@@ -72,6 +72,7 @@ export function LoginForm({
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
+  const [lineStore, setLineStore] = useState("");
 
   async function submitLogin(): Promise<void> {
     setIsSubmitting(true);
@@ -214,6 +215,25 @@ export function LoginForm({
           </button>
         </div>
       ) : null}
+
+      <form className="mt-6 space-y-3" onSubmit={(event) => {
+        event.preventDefault();
+        if (lineStore.trim()) window.location.assign(
+          `/api/auth/line/login?store=${encodeURIComponent(lineStore.trim())}`);
+      }}>
+        <label className="block text-sm font-medium text-slate-700" htmlFor="line-store">
+          店家預約代碼
+        </label>
+        <input id="line-store" className="h-12 w-full rounded-md border border-slate-300 px-4 focus:outline-none focus:ring-2 focus:ring-teal/50"
+          value={lineStore} onChange={(event) => setLineStore(event.target.value)}
+          autoComplete="off" required pattern="[a-z0-9-]+" maxLength={80}
+          placeholder="store-code" disabled={!isHydrated}/>
+        <button type="submit" disabled={!isHydrated || !lineStore.trim()}
+          className="h-12 w-full rounded-md bg-teal px-5 font-semibold text-white focus:outline-none focus:ring-2 focus:ring-teal/50 disabled:opacity-50">
+          使用 LINE 登入後台
+        </button>
+        <p className="text-xs text-slate-500">需先由店家核准 LINE 與既有員工帳號的連結。</p>
+      </form>
 
       <form
         className="mt-6 space-y-4"

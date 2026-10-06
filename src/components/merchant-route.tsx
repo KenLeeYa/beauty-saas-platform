@@ -1,10 +1,11 @@
-import { redirect } from "next/navigation";
+import { forbidden, redirect } from "next/navigation";
 
 import { MerchantWorkspace } from "@/components/merchant-workspace";
 import { getCurrentSession } from "@/server/auth/session";
 import { hasCapability } from "@/server/authorization/capabilities";
 import { resolveMerchantContext } from "@/server/merchant/context";
 import { getMerchantWorkspaceData } from "@/server/merchant/data";
+import { canShowModule } from "@/server/entitlements/module-visibility";
 
 export type MerchantView =
   | "dashboard"
@@ -16,6 +17,7 @@ export type MerchantView =
   | "resources"
   | "locations"
   | "reports"
+  | "operations"
   | "team"
   | "subscription"
   | "billing"
@@ -48,6 +50,8 @@ export async function MerchantRoute({
   if (staffOnly && context.location) {
     redirect(`/staff/${encodeURIComponent(context.location.slug)}`);
   }
+  const crmVisible=await canShowModule(context,"CUSTOMER_CRM");
+  if(activeView==="customers" && !crmVisible) forbidden();
   const data = await getMerchantWorkspaceData(context);
   const entityRevision =
     activeView === "services"
@@ -70,6 +74,7 @@ export async function MerchantRoute({
     <MerchantWorkspace
       activeView={activeView}
       initialData={data}
+      crmVisible={crmVisible}
       key={workspaceRevision}
     />
   );

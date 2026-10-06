@@ -5,7 +5,8 @@ export type OAuthErrorCode =
   | "start-failed"
   | "callback-failed"
   | "account-conflict"
-  | "account-disabled";
+  | "account-disabled"
+  | "line-start-failed";
 
 export function normalizeRelativeRedirect(
   value: string | null | undefined,
@@ -51,6 +52,8 @@ export function getOAuthErrorMessage(
       return "此 Email 已連結其他登入帳號，請聯絡管理員。";
     case "account-disabled":
       return "此帳號已停用，請聯絡管理員。";
+    case "line-start-failed":
+      return "LINE 後台登入無法啟動；請確認店家代碼及 LINE 通道設定。";
     default:
       return undefined;
   }

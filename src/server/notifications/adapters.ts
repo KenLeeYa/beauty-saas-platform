@@ -1,9 +1,11 @@
 import "server-only";
 
-import type { notification_channel } from "@prisma/client";
+import { Prisma, type notification_channel } from "@prisma/client";
 import { z } from "zod";
 
 import { getServerEnv } from "../env";
+import { prisma } from "../database/prisma";
+import { getStoreLineMessagingChannel } from "./line-channel-registry";
 
 export type NotificationMessage = {
   recipient: string;
@@ -180,4 +182,25 @@ export function getNotificationAdapter(
     channel,
     `${channel}_PROVIDER_DISABLED`,
   );
+}
+
+export async function getNotificationAdapterForLocation(
+  channel:notification_channel, organizationId:string, locationId:string | null,
+):Promise<NotificationAdapter> {
+  if(channel!=="LINE" || !locationId) return getNotificationAdapter(channel);
+  const active=await prisma.$queryRaw<{id:string}[]>(Prisma.sql`
+    select id from public.mobile_store_entries
+    where organization_id=${organizationId}::uuid
+      and location_id=${locationId}::uuid and is_enabled limit 1
+  `);
+  if(!active.length) return getNotificationAdapter(channel);
+  if(getServerEnv().NOTIFICATION_PROVIDER!=="line")
+    return new DisabledNotificationAdapter("LINE","NOTIFICATION_PROVIDER_DISABLED");
+  const configured=await getStoreLineMessagingChannel(organizationId,locationId);
+  if(!configured) return new DisabledNotificationAdapter("LINE","STORE_LINE_CHANNEL_NOT_CONFIGURED");
+  const tokens=z.record(z.string(),z.string()).parse(JSON.parse(
+    process.env.LINE_BOOKING_CHANNEL_ACCESS_TOKENS_JSON||"{}") as unknown);
+  const token=tokens[configured.channelId];
+  return token?new LineNotificationAdapter(token):
+    new DisabledNotificationAdapter("LINE","STORE_LINE_ACCESS_TOKEN_NOT_CONFIGURED");
 }

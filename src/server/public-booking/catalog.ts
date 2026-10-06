@@ -228,6 +228,8 @@ export async function getPublicCatalogForContext(
             where: {
               is_active: true,
               online_booking_enabled: true,
+              effective_from: { lte: new Date() },
+              OR: [{ effective_until: null }, { effective_until: { gt: new Date() } }],
               staff_profiles: {
                 is_active: true,
                 public_visible: true,

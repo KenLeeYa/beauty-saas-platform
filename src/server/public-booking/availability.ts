@@ -143,6 +143,7 @@ export async function getPublicAvailability(
   context: PublicSessionContext,
   input: PublicAvailabilityInput,
   now = new Date(),
+  leadMinutesOverride?: number,
 ): Promise<PublicAvailability> {
   await prisma.$queryRaw(
     Prisma.sql`select beauty_private.expire_booking_holds()`,
@@ -256,6 +257,8 @@ export async function getPublicAvailability(
             where: {
               is_active: true,
               online_booking_enabled: true,
+              effective_from: { lt: dayEnd },
+              OR: [{ effective_until: null }, { effective_until: { gt: dayStart } }],
               ...(input.staffProfileId
                 ? { staff_profile_id: input.staffProfileId }
                 : {}),
@@ -276,6 +279,8 @@ export async function getPublicAvailability(
               },
             },
             select: {
+              effective_from: true,
+              effective_until: true,
               staff_profiles: {
                 select: {
                   id: true,
@@ -474,7 +479,7 @@ export async function getPublicAvailability(
   const priceMinor =
     locationService.price_override_minor ?? variant.price_minor;
   const notBefore = new Date(
-    now.getTime() + policy.minimum_lead_minutes * 60_000,
+    now.getTime() + (leadMinutesOverride ?? policy.minimum_lead_minutes) * 60_000,
   );
   const requirements =
     variant.service_resource_requirements.map((requirement) => ({
@@ -516,7 +521,7 @@ export async function getPublicAvailability(
     PublicAvailability["slots"][number]
   >();
 
-  for (const { staff_profiles: staff } of locationService.service_staff_assignments) {
+  for (const { staff_profiles: staff, effective_from, effective_until } of locationService.service_staff_assignments) {
     const weeklyHours = staff.staff_availability_rules.map((rule) => ({
       opensAt: databaseTimeToString(rule.starts_at),
       closesAt: databaseTimeToString(rule.ends_at),
@@ -587,6 +592,9 @@ export async function getPublicAvailability(
       });
 
       for (const slot of generated) {
+        if (slot.startsAt < effective_from || (effective_until && slot.startsAt >= effective_until)) {
+          continue;
+        }
         const resourceIds = selectResources({
           requirements,
           candidates: resources,

@@ -42,7 +42,12 @@ export async function resolveSupabaseProfile(input: {
       );
     }
 
-    const existing = byAuthId ?? byEmail;
+    // A verified email is still not proof that an existing merchant profile
+    // belongs to this OAuth subject. Link it through an authenticated flow.
+    if (!byAuthId && byEmail) {
+      throw new AppError("CONFLICT", "Existing account requires verified linking", 409);
+    }
+    const existing = byAuthId;
     if (existing) {
       if (!existing.is_active) {
         throw new AppError("FORBIDDEN", "此帳號已停用。", 403);

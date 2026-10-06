@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@prisma/client";
+import { compensatePrestartDispatch } from "../booking/dispatch";
 
 import {
   canTransitionBooking,
@@ -155,6 +156,10 @@ export async function updateMerchantBookingStatus(input: {
           "預約已被其他人更新，請重新整理後再試。",
           409,
         );
+      }
+      if (input.nextStatus === "CANCELLED") {
+        await compensatePrestartDispatch(transaction, booking.id,
+          input.context.organization.id, location.id, input.reason ?? "merchant cancellation");
       }
 
       await transaction.booking_events.create({

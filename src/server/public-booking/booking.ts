@@ -1,6 +1,8 @@
 import "server-only";
 
-import { Prisma } from "@prisma/client";
+import { Prisma, type booking_source } from "@prisma/client";
+import { getBookingEligibility } from "../../modules/crm/server/customer-status";
+import { compensatePrestartDispatch } from "../booking/dispatch";
 
 import {
   calculateCancellationFeeMinor,
@@ -306,6 +308,10 @@ export async function confirmPublicBooking(input: {
   context: PublicSessionContext;
   payload: ConfirmPublicBookingInput;
   idempotencyKey: string;
+  source?: booking_source;
+  linkedCustomerId?: string;
+  keepSessionActive?: boolean;
+  dispatchClaimId?: string;
 }): Promise<PublicBookingSummary> {
   await prisma.$queryRaw(
     Prisma.sql`select beauty_private.expire_booking_holds()`,
@@ -454,8 +460,13 @@ export async function confirmPublicBooking(input: {
         const emailMatch = contactMatches.find(
           (contact) => contact.contact_type === "EMAIL",
         );
-        const existingCustomerId =
-          phoneMatch?.customer_id ?? emailMatch?.customer_id;
+          if (input.linkedCustomerId &&
+              ((phoneMatch && phoneMatch.customer_id !== input.linkedCustomerId) ||
+               (emailMatch && emailMatch.customer_id !== input.linkedCustomerId))) {
+            throw new AppError("CONFLICT", "Contact belongs to another customer", 409);
+          }
+          const existingCustomerId = input.linkedCustomerId ??
+            phoneMatch?.customer_id ?? emailMatch?.customer_id;
         const customer = existingCustomerId
           ? await transaction.customers.findFirstOrThrow({
               where: {
@@ -463,17 +474,19 @@ export async function confirmPublicBooking(input: {
                 organization_id: input.context.organizationId,
                 is_active: true,
               },
-              select: {
-                id: true,
-                deposit_mode: true,
-                is_blacklisted: true,
+                select: {
+                  id: true,
+                  display_name: true,
+                  deposit_mode: true,
+                  is_blacklisted: true,
               },
             })
           : await transaction.customers.create({
               data: {
                 organization_id: input.context.organizationId,
                 display_name: input.payload.customer.displayName,
-                source: "WEBSITE",
+                  source: input.source === "LINE" ? "LINE" :
+                    input.source === "PHONE" ? "PHONE" : "WEBSITE",
                 general_preferences:
                   input.payload.customer.note || null,
                 customer_contacts: {
@@ -497,14 +510,17 @@ export async function confirmPublicBooking(input: {
                   ],
                 },
               },
-              select: {
-                id: true,
-                deposit_mode: true,
-                is_blacklisted: true,
+                select: {
+                  id: true,
+                  display_name: true,
+                  deposit_mode: true,
+                  is_blacklisted: true,
               },
             });
 
-        if (customer.is_blacklisted) {
+          const eligibility = await getBookingEligibility(input.context.organizationId,
+            input.context.locationId, customer.id, transaction);
+          if (!eligibility.allowed) {
           throw new AppError(
             "FORBIDDEN",
             "此聯絡方式目前無法使用線上預約，請直接聯絡店家。",
@@ -529,6 +545,10 @@ export async function confirmPublicBooking(input: {
                 is_primary: true,
               },
             });
+          }
+          if (input.linkedCustomerId && customer.display_name === "LINE customer") {
+            await transaction.customers.update({where:{id:customer.id},
+              data:{display_name:input.payload.customer.displayName}});
           }
 
           const existingEmail = contactMatches.some(
@@ -666,7 +686,7 @@ export async function confirmPublicBooking(input: {
             organization_id: input.context.organizationId,
             location_id: input.context.locationId,
             customer_id: customer.id,
-            source: "ONLINE",
+              source: input.source ?? "ONLINE",
             status,
             subtotal_minor: totalMinor,
             total_minor: totalMinor,
@@ -749,7 +769,35 @@ export async function confirmPublicBooking(input: {
             confirmed_at: new Date(),
           },
         });
-        await transaction.public_booking_sessions.update({
+        if (input.dispatchClaimId) {
+          const claims = await transaction.$queryRaw<{ id: string; mode: string }[]>(Prisma.sql`
+            select id, mode from public.booking_dispatch_claims
+            where id = ${input.dispatchClaimId}::uuid
+              and organization_id = ${input.context.organizationId}::uuid
+              and location_id = ${input.context.locationId}::uuid
+              and staff_profile_id = ${hold.staff_profile_id}::uuid
+              and service_variant_id = ${hold.service_variants.id}::uuid
+              and starts_at = ${hold.starts_at}
+              and status = 'PENDING' and expires_at > now()
+            for update
+          `);
+          const claim = claims[0];
+          if (!claim) throw new AppError("CONFLICT", "Dispatch claim expired", 409);
+          await transaction.$executeRaw(Prisma.sql`
+            update public.booking_dispatch_claims set status = 'CONFIRMED',
+              booking_id = ${booking.id}::uuid where id = ${claim.id}::uuid
+          `);
+          await transaction.$executeRaw(Prisma.sql`
+            insert into public.booking_dispatch_events
+              (organization_id, location_id, claim_id, booking_id,
+               staff_profile_id, event_type)
+            values (${input.context.organizationId}::uuid,
+              ${input.context.locationId}::uuid, ${claim.id}::uuid,
+              ${booking.id}::uuid, ${hold.staff_profile_id}::uuid,
+              ${claim.mode === "IMMEDIATE" ? "IMMEDIATE_ASSIGNED" : "FUTURE_RESERVED"})
+          `);
+        }
+          if (!input.keepSessionActive) await transaction.public_booking_sessions.update({
           where: {
             id: input.context.sessionId,
           },
@@ -945,7 +993,33 @@ export async function cancelPublicBooking(input: {
   reason: string;
   requestId: string;
 }): Promise<PublicBookingSummary> {
-  const trackingHash = sha256(input.trackingToken);
+  await cancelBookingInternal({trackingHash: sha256(input.trackingToken),
+    reason: input.reason, requestId: input.requestId});
+  return getPublicBooking(input.trackingToken);
+}
+
+export async function cancelPublicBookingByCustomer(input: {
+  bookingId: string;
+  organizationId: string;
+  locationId: string;
+  customerId: string;
+  reason: string;
+  requestId: string;
+}): Promise<{ id: string; status: "CANCELLED" }> {
+  await cancelBookingInternal(input);
+  return {id: input.bookingId, status: "CANCELLED"};
+}
+
+async function cancelBookingInternal(input: {
+  trackingHash?: string;
+  bookingId?: string;
+  organizationId?: string;
+  locationId?: string;
+  customerId?: string;
+  reason: string;
+  requestId: string;
+}): Promise<void> {
+  const trackingHash = input.trackingHash;
 
   await prisma.$transaction(
     async (transaction) => {
@@ -953,14 +1027,13 @@ export async function cancelPublicBooking(input: {
         Prisma.sql`
           select id
           from public.bookings
-          where tracking_token_hash = ${trackingHash}
+            where ${trackingHash ? Prisma.sql`tracking_token_hash = ${trackingHash}` :
+              Prisma.sql`id = ${input.bookingId}::uuid`}
           for update
         `,
       );
       const booking = await transaction.bookings.findUnique({
-        where: {
-          tracking_token_hash: trackingHash,
-        },
+          where: trackingHash ? { tracking_token_hash: trackingHash } : { id: input.bookingId },
         select: {
           id: true,
           organization_id: true,
@@ -994,7 +1067,13 @@ export async function cancelPublicBooking(input: {
       if (!booking) {
         throw new AppError("NOT_FOUND", "找不到預約資料。", 404);
       }
-      if (booking.status === "CANCELLED") {
+        if (input.bookingId && (booking.id !== input.bookingId ||
+            booking.organization_id !== input.organizationId ||
+            booking.location_id !== input.locationId ||
+            booking.customer_id !== input.customerId)) {
+          throw new AppError("NOT_FOUND", "Booking not found", 404);
+        }
+        if (booking.status === "CANCELLED") {
         return;
       }
       if (
@@ -1039,6 +1118,8 @@ export async function cancelPublicBooking(input: {
           cancelled_at: cancelledAt,
         },
       });
+      await compensatePrestartDispatch(transaction, booking.id,
+        booking.organization_id, booking.location_id, input.reason);
       await transaction.booking_events.create({
         data: {
           organization_id: booking.organization_id,
@@ -1071,27 +1152,44 @@ export async function cancelPublicBooking(input: {
         },
       });
     },
-    {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      maxWait: 5_000,
-      timeout: 10_000,
-    },
-  );
-
-  return getPublicBooking(input.trackingToken);
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: 5_000,
+        timeout: 10_000,
+      },
+    );
 }
 
 export async function reschedulePublicBooking(input: {
   context: PublicSessionContext;
-  trackingToken: string;
+  trackingToken?: string;
+  authorizedBooking?: { id: string; customerId?: string;
+    staffProfileId?: string; manageAll?: boolean };
   holdToken: string;
   idempotencyKey: string;
+  keepSessionActive?: boolean;
 }): Promise<PublicBookingSummary> {
   await prisma.$queryRaw(
     Prisma.sql`select beauty_private.expire_booking_holds()`,
   );
 
-  const oldTrackingHash = sha256(input.trackingToken);
+  const oldTrackingHash = input.trackingToken ? sha256(input.trackingToken) : null;
+  if (!oldTrackingHash && !input.authorizedBooking) {
+    throw new AppError("BAD_REQUEST", "Booking authorization required", 400);
+  }
+  if (input.authorizedBooking) {
+    if (!input.authorizedBooking.customerId && !input.authorizedBooking.manageAll &&
+        !input.authorizedBooking.staffProfileId)
+      throw new AppError("FORBIDDEN","Booking access denied",403);
+    const authorized = await prisma.bookings.findFirst({where:{
+      id:input.authorizedBooking.id,
+      ...(input.authorizedBooking.customerId ? {customer_id:input.authorizedBooking.customerId} : {}),
+      ...(!input.authorizedBooking.customerId && !input.authorizedBooking.manageAll ?
+        {booking_segments:{some:{assigned_staff_id:input.authorizedBooking.staffProfileId}}} : {}),
+      organization_id:input.context.organizationId, location_id:input.context.locationId,
+    },select:{id:true}});
+    if (!authorized) throw new AppError("NOT_FOUND", "Booking not found", 404);
+  }
   const holdHash = sha256(input.holdToken);
   const newTrackingToken = deriveTrackingToken(input.holdToken);
   const newTrackingHash = sha256(newTrackingToken);
@@ -1107,7 +1205,8 @@ export async function reschedulePublicBooking(input: {
           Prisma.sql`
             select id
             from public.bookings
-            where tracking_token_hash = ${oldTrackingHash}
+            where ${oldTrackingHash ? Prisma.sql`tracking_token_hash = ${oldTrackingHash}` :
+              Prisma.sql`id = ${input.authorizedBooking?.id}::uuid`}
             for update
           `,
         );
@@ -1121,16 +1220,16 @@ export async function reschedulePublicBooking(input: {
         );
 
         const original = await transaction.bookings.findUnique({
-          where: {
-            tracking_token_hash: oldTrackingHash,
-          },
+            where: oldTrackingHash ? {tracking_token_hash:oldTrackingHash} :
+              {id:input.authorizedBooking?.id},
           select: {
             id: true,
             organization_id: true,
             location_id: true,
-            customer_id: true,
-            status: true,
-            payment_status: true,
+              customer_id: true,
+              source: true,
+              status: true,
+              payment_status: true,
             subtotal_minor: true,
             discount_minor: true,
             total_minor: true,
@@ -1201,6 +1300,20 @@ export async function reschedulePublicBooking(input: {
         });
 
         const originalSegment = original?.booking_segments[0];
+        if (input.authorizedBooking && original && (
+          original.id !== input.authorizedBooking.id ||
+          (input.authorizedBooking.customerId &&
+            original.customer_id !== input.authorizedBooking.customerId) ||
+          original.organization_id !== input.context.organizationId ||
+          original.location_id !== input.context.locationId)) {
+          throw new AppError("NOT_FOUND", "Booking not found", 404);
+        }
+        if (input.authorizedBooking && original && !input.authorizedBooking.customerId &&
+            !input.authorizedBooking.manageAll &&
+            !await transaction.booking_segments.count({where:{booking_id:original.id,
+              assigned_staff_id:input.authorizedBooking.staffProfileId}})) {
+          throw new AppError("NOT_FOUND","Booking not found",404);
+        }
         if (!original || !originalSegment) {
           throw new AppError("NOT_FOUND", "找不到預約資料。", 404);
         }
@@ -1242,7 +1355,7 @@ export async function reschedulePublicBooking(input: {
             organization_id: original.organization_id,
             location_id: original.location_id,
             customer_id: original.customer_id,
-            source: "ONLINE",
+            source: original.source,
             status: "CONFIRMED",
             payment_status: original.payment_status,
             subtotal_minor: original.subtotal_minor,
@@ -1323,7 +1436,7 @@ export async function reschedulePublicBooking(input: {
             confirmed_at: new Date(),
           },
         });
-        await transaction.public_booking_sessions.update({
+          if (!input.keepSessionActive) await transaction.public_booking_sessions.update({
           where: {
             id: input.context.sessionId,
           },

@@ -6,6 +6,7 @@ import {
 } from "@/server/auth/session";
 import { jsonError, jsonSuccess } from "@/server/http/response";
 import { resolveMerchantContext } from "@/server/merchant/context";
+import { requireModule } from "@/server/entitlements/module-visibility";
 import {
   createMerchantCustomer,
   updateMerchantCustomer,
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
       organizationSlug: scope.organization,
       locationSlug: scope.location,
     });
+    await requireModule(context,"CUSTOMER_CRM");
     const input = createMerchantCustomerSchema.parse(
       await request.json(),
     );
@@ -57,6 +59,7 @@ export async function PATCH(request: NextRequest) {
       organizationSlug: scope.organization,
       locationSlug: scope.location,
     });
+    await requireModule(context,"CUSTOMER_CRM");
     const input = updateMerchantCustomerSchema.parse(
       await request.json(),
     );

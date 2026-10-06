@@ -1,5 +1,6 @@
 import "server-only";
 
+import { Prisma } from "@prisma/client";
 import { cookies } from "next/headers";
 import type { NextRequest, NextResponse } from "next/server";
 
@@ -51,12 +52,14 @@ export async function createApplicationSession(input: {
   profileId: string;
   userAgent?: string | null;
   ipIdentifier?: string | null;
+  lineLink?: { id: string; organizationId: string; locationId: string };
 }): Promise<SessionMaterial> {
   const sessionToken = randomToken(32);
   const csrfToken = randomToken(32);
   const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
 
-  const created = await prisma.auth_sessions.create({
+  await prisma.$transaction(async (transaction) => {
+    const session = await transaction.auth_sessions.create({
     data: {
       profile_id: input.profileId,
       token_hash: sha256(sessionToken),
@@ -69,14 +72,30 @@ export async function createApplicationSession(input: {
       id: true,
     },
   });
-
-  await prisma.auth_sessions.update({
+    if (input.lineLink) {
+      const inserted = await transaction.$executeRaw(Prisma.sql`
+        insert into public.line_desktop_sessions
+          (auth_session_id, identity_link_id, organization_id, location_id)
+        select ${session.id}::uuid, link.id, link.organization_id,
+          ${input.lineLink.locationId}::uuid
+        from public.line_identity_links link
+        where link.id=${input.lineLink.id}::uuid
+          and link.organization_id=${input.lineLink.organizationId}::uuid
+          and link.profile_id=${input.profileId}::uuid
+          and link.actor_kind='EMPLOYEE' and link.approved_at is not null
+          and link.revoked_at is null
+      `);
+      if (inserted !== 1) throw new AppError("FORBIDDEN", "LINE link expired", 403);
+    }
+    await transaction.auth_sessions.update({
     where: {
-      id: created.id,
+      id: session.id,
     },
     data: {
-      csrf_token_hash: csrfHash(created.id, csrfToken),
+      csrf_token_hash: csrfHash(session.id, csrfToken),
     },
+    });
+    return session;
   });
 
   return {
@@ -160,6 +179,14 @@ export async function resolveSessionToken(
   ) {
     return null;
   }
+
+  const lineSessions = await prisma.$queryRaw<{ active: boolean }[]>(Prisma.sql`
+    select link.revoked_at is null and link.approved_at is not null as active
+    from public.line_desktop_sessions desktop
+    join public.line_identity_links link on link.id=desktop.identity_link_id
+    where desktop.auth_session_id=${session.id}::uuid
+  `);
+  if (lineSessions[0] && !lineSessions[0].active) return null;
 
   if (Date.now() - session.last_seen_at.getTime() > 5 * 60 * 1000) {
     await prisma.auth_sessions.update({

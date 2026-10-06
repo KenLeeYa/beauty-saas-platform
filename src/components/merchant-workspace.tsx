@@ -84,6 +84,7 @@ const navItems: Array<{
   { view: "resources", label: "空間資源", icon: Wrench },
   { view: "locations", label: "分店", icon: Building2 },
   { view: "reports", label: "報表", icon: BarChart3 },
+  { view: "operations", label: "出勤與薪資審核", icon: Clock3 },
   { view: "team", label: "團隊", icon: Users },
   { view: "subscription", label: "方案", icon: CreditCard },
   { view: "billing", label: "帳務", icon: ReceiptText },
@@ -100,6 +101,7 @@ const viewTitles: Readonly<Record<MerchantView, string>> = {
   resources: "空間與設備",
   locations: "分店管理",
   reports: "營運報表",
+  operations: "出勤與薪資審核",
   team: "團隊與權限",
   subscription: "訂閱方案",
   billing: "帳務管理",
@@ -198,11 +200,13 @@ function EmptyState({
 }
 
 export function MerchantWorkspace({
-  activeView,
-  initialData,
-}: {
-  activeView: MerchantView;
-  initialData: MerchantWorkspaceData;
+    activeView,
+    initialData,
+    crmVisible,
+  }: {
+    activeView: MerchantView;
+    initialData: MerchantWorkspaceData;
+    crmVisible: boolean;
 }) {
   const router = useRouter();
   const [data, setData] = useState(initialData);
@@ -3226,7 +3230,7 @@ export function MerchantWorkspace({
             <PackagePlus aria-hidden="true" className="h-4 w-4" />
             開店設定
           </Link>
-          {navItems.map((item) => {
+          {navItems.filter(item=>(crmVisible||item.view!=="customers") && (item.view!=="operations" || initialData.capabilities.includes("staff.manage") || initialData.capabilities.includes("billing.read"))).map((item) => {
             const Icon = item.icon;
             return (
               <Link

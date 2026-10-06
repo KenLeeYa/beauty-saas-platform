@@ -1681,6 +1681,9 @@ model service_staff_assignments {
   location_service_id    String            @db.Uuid
   staff_profile_id       String            @db.Uuid
   online_booking_enabled Boolean           @default(true)
+  walk_in_eligible        Boolean           @default(true)
+  effective_from          DateTime          @default(dbgenerated("'2000-01-01T00:00:00Z'::timestamptz")) @db.Timestamptz(6)
+  effective_until         DateTime?         @db.Timestamptz(6)
   is_active              Boolean           @default(true)
   created_at             DateTime          @default(now()) @db.Timestamptz(6)
   updated_at             DateTime          @default(now()) @db.Timestamptz(6)
