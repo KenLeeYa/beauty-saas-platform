@@ -8,6 +8,7 @@ import { createLineMobileSession, ensureCustomerLineLink,
   lineSubjectHash } from "@/server/auth/line-linking";
 import { prisma } from "@/server/database/prisma";
 import { randomToken } from "@/server/security/crypto";
+import { localTrialOrigin } from "@/server/mobile/local-trial-policy";
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
 const locationId = "22222222-2222-4222-8222-222222222221";
@@ -21,17 +22,12 @@ const roles = {
   owner: "33333333-3333-4333-8333-333333333301",
 } as const;
 
-function permitted(request: NextRequest): boolean {
-  const host = request.nextUrl.hostname;
-  return process.env.APP_ENV === "test" &&
-    process.env.UNIFIED_LOCAL_TRIAL === "true" &&
-    ["127.0.0.1","localhost","::1"].includes(host) &&
-    ["127.0.0.1","localhost","::1"].includes(request.headers.get("host")?.split(":")[0] ?? "");
-}
-
 export async function GET(request: NextRequest): Promise<Response> {
-  if (!permitted(request)) return new Response("Not found",{ status: 404 });
-  const trialOrigin=`http://${request.headers.get("host")}`;
+  const host = request.headers.get("host");
+  const publicUrl = new URL(request.url);
+  if (host) publicUrl.host = host;
+  const trialOrigin = localTrialOrigin(publicUrl.toString(), host, process.env);
+  if (!trialOrigin) return new Response("Not found",{ status: 404 });
   const role = z.enum(["customer","receptionist","beautician","owner"])
     .safeParse(request.nextUrl.searchParams.get("role"));
   if (!role.success) return new Response("Invalid synthetic role",{ status: 400 });
@@ -94,6 +90,9 @@ export async function GET(request: NextRequest): Promise<Response> {
       sameSite:"lax",secure:false,path:"/",maxAge:8*3600 });
     response.cookies.set(CSRF_COOKIE_NAME,desktop.csrfToken,{ httpOnly:false,
       sameSite:"lax",secure:false,path:"/",maxAge:8*3600 });
+  } else {
+    response.cookies.set(SESSION_COOKIE_NAME,"",{ httpOnly:true,sameSite:"lax",path:"/",maxAge:0 });
+    response.cookies.set(CSRF_COOKIE_NAME,"",{ sameSite:"lax",path:"/",maxAge:0 });
   }
   return response;
 }

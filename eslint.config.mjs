@@ -13,6 +13,7 @@ export default defineConfig([
     "coverage/**",
     "playwright-report/**",
     "test-results/**",
+    "vendor/**",
     "supabase/.temp/**",
     "next-env.d.ts"
   ])

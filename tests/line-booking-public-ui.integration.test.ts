@@ -80,6 +80,16 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL || !process.env.UNIFIED_TEST_UI
       await page.locator('#booking form button').first().click();
       await page.locator('#date').fill(selectedDate);
       await page.locator(`input[name="start"][value="${slot}"]`).check();
+      await page.locator('#booking form button').first().click();
+      await page.locator('#staff').selectOption('any');
+      await page.locator('#staff').selectOption(staff);
+      await page.locator('#booking form button').first().click();
+      expect(await page.locator('#booking form button').last().isDisabled()).toBe(true);
+      await page.locator(`input[name="start"][value="${slot}"]`).check();
+      await page.locator('#date').fill(addLocalDays(selectedDate,1));
+      expect(await page.locator('#booking form button').last().isDisabled()).toBe(true);
+      await page.locator('#date').fill(selectedDate);
+      await page.locator(`input[name="start"][value="${slot}"]`).check();
       await page.locator('#booking form button').last().click();
       await page.locator('#booking form button[type="submit"]').click();
       await page.locator('#booking small[role="alert"]').first().waitFor();
@@ -96,7 +106,12 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL || !process.env.UNIFIED_TEST_UI
         select:{id:true,source:true,status:true}});
       expect(booking.source).toBe('LINE');
       expect((await prisma.customers.findUniqueOrThrow({where:{id:customerId}})).display_name).toBe(name);
-      await page.screenshot({path:'../line-booking/.local/unified-public-mobile.png'});
+      for (const width of [360,390,430,768,1280]) {
+        await page.setViewportSize({width,height:844});
+        expect(await page.locator('html').evaluate(element=>element.scrollWidth<=innerWidth)).toBe(true);
+        await page.screenshot({path:`.dev-logs/booking-${width}.png`,fullPage:true});
+      }
+      await page.getByRole('button',{name:'我的預約',exact:true}).click();
       const opener=page.locator(`#mine article[data-booking-id="${booking.id}"] button`).first();
       await opener.focus();await page.keyboard.press('Enter');
       const dialog=page.getByRole('dialog');await dialog.waitFor();
