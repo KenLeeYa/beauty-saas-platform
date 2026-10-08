@@ -14,6 +14,11 @@ it.skipIf(!process.env.UNIFIED_UI_TEST_URL)("enters all synthetic roles and clea
       await page.goto(`${base}/api/line-booking/integrated-demo?role=${role}`);
       if (role === "owner") {
         await browserExpect(page.getByRole("heading",{name:"Operations review"})).toBeVisible();
+        for (const width of [360,390,430,768,1280]) {
+          await page.setViewportSize({width,height:844});
+          expect(await page.locator("html").evaluate(element=>element.scrollWidth<=innerWidth)).toBe(true);
+          await page.screenshot({path:`.dev-logs/owner-operations-${width}.png`,fullPage:true});
+        }
         await page.goto(`${base}/api/line-booking/integrated-demo?role=customer`);
         expect((await context.cookies()).some(cookie=>cookie.name==="beauty_session")).toBe(false);
       }
@@ -33,10 +38,24 @@ it.skipIf(!process.env.UNIFIED_UI_TEST_URL)("enters all synthetic roles and clea
       for (const width of [360,390,430,768,1280]) {
         await page.setViewportSize({width,height:844});
         expect(await page.locator("html").evaluate(element=>element.scrollWidth<=innerWidth)).toBe(true);
-        await page.screenshot({path:`.dev-logs/${role}-${width}.png`,fullPage:true});
+        await page.screenshot({path:`.dev-logs/${role === "owner" ? "owner-switched-customer" : role}-${width}.png`,fullPage:true});
       }
       expect(errors).toEqual([]);
       await context.close();
+    }
+    if (process.env.UNIFIED_UI_LAN_URL) {
+      const context = await browser.newContext({viewport:{width:390,height:844}});
+      try {
+        const page = await context.newPage();
+        const errors: string[] = [];
+        page.on("pageerror", error => errors.push(error.message));
+        await page.goto(`${process.env.UNIFIED_UI_LAN_URL}/api/line-booking/integrated-demo?role=customer`);
+        await browserExpect(page.locator("#service")).toBeVisible();
+        await page.getByRole("button",{name:"選擇時間",exact:true}).click();
+        await browserExpect(page.locator("#date")).toBeVisible();
+        expect(errors).toEqual([]);
+        await page.screenshot({path:".dev-logs/lan-customer-390.png",fullPage:true});
+      } finally { await context.close(); }
     }
   } finally { await browser.close(); }
 },90000);

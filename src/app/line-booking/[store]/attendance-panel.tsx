@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { requestId } from "@/lib/line-booking/request-id";
 
 import styles from "./booking.module.css";
 
@@ -39,7 +40,7 @@ export default function AttendancePanel({ store }: { store: string }) {
     try {
       const response = await fetch("/api/line-booking/attendance", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ store, kind, idempotencyKey: crypto.randomUUID() }),
+        body: JSON.stringify({ store, kind, idempotencyKey: requestId() }),
       });
       const data = await response.json() as { error?: string };
       if (!response.ok) throw Error(data.error || "打卡失敗");

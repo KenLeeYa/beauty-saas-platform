@@ -75,6 +75,7 @@ try {
   } else if (mode === "ui") {
     env.UNIFIED_TEST_UI_URL = origins[0];
     env.UNIFIED_UI_TEST_URL = origins[0];
+    env.UNIFIED_UI_LAN_URL = origins[2] || "";
     run(["node_modules/vitest/vitest.mjs", "run", "--no-file-parallelism",
       "tests/line-booking-public-ui.integration.test.ts", "tests/operations-ui.integration.test.ts",
       "tests/msi-role-ui.integration.test.ts"]);

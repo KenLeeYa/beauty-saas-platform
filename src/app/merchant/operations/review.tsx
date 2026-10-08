@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { requestId } from "@/lib/line-booking/request-id";
 
 type Attendance = { id: string; profileId: string; kind: string;
   occurredAt: string; correctedAt: string | null };
@@ -327,7 +328,7 @@ export function OperationsReview({ organization, location }: {
         <button key={period.id} disabled={busy || !refundId || !adjustDate}
           onClick={() => void act({ action: "ADJUST_REFUND", originalPeriodId: period.id,
             bookingRefundId: refundId, appliesOn: adjustDate,
-            idempotencyKey: crypto.randomUUID() })}>Adjust {name(period.profileId)} {period.from.slice(0,10)}</button>)}
+            idempotencyKey: requestId() })}>Adjust {name(period.profileId)} {period.from.slice(0,10)}</button>)}
     </section>
     <section aria-label="Benefit and commission review">
       <h2>Benefits and commission preview</h2>
@@ -377,20 +378,20 @@ export function OperationsReview({ organization, location }: {
       <button disabled={busy || !customerId || quantity < 1}
         onClick={() => void benefitRequest({ action: "ISSUE", customerId,
           kind: benefitKind, quantity, ...(benefitKind === "COUPON" ?
-            { discountMinor } : { serviceVariantId }), idempotencyKey: crypto.randomUUID() })}>
+            { discountMinor } : { serviceVariantId }), idempotencyKey: requestId() })}>
         Issue synthetic benefit</button>
       <label>Booking ID <input value={bookingId} onChange={event => setBookingId(event.target.value)} /></label>
       <label>Issue ID <input value={issueId} onChange={event => setIssueId(event.target.value)} /></label>
       {(["RESERVE","REDEEM","RELEASE","CANCEL"] as const).map(action =>
         <button key={action} disabled={busy || !customerId || !bookingId || !issueId}
           onClick={() => void benefitRequest({ action, customerId, bookingId,
-            issueId, quantity, idempotencyKey: crypto.randomUUID() })}>{action}</button>)}
+            issueId, quantity, idempotencyKey: requestId() })}>{action}</button>)}
       <label>Confirmed refund ID <input value={refundId}
         onChange={event => setRefundId(event.target.value)} /></label>
       <button disabled={busy || !customerId || !bookingId || !issueId || !refundId}
         onClick={() => void benefitRequest({ action: "REFUND", customerId,
           bookingId, issueId, bookingRefundId: refundId, quantity,
-          idempotencyKey: crypto.randomUUID() })}>Refund benefit</button>
+          idempotencyKey: requestId() })}>Refund benefit</button>
       <button disabled={!bookingId} onClick={() => void previewBenefit("bookingId",bookingId)}>
         Preview commission</button>
       <h3>Promotion checkout</h3>

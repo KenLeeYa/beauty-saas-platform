@@ -7,6 +7,7 @@ import {CalendarDays, ClipboardList, Clock, UserRound, UsersRound} from 'lucide-
 import {Dialog, DialogContent, DialogDescription, DialogTitle} from '@/components/ui/dialog';
 import {Button} from '@/components/ui/button';
 import {contactSchema, type BookingContact} from '@/lib/line-booking/contact-schema';
+import {requestId} from '@/lib/line-booking/request-id';
 import {formatDateInTimeZone} from '@/server/time/timezone';
 import MemberSummary from './member-summary';
 import ExceptionQueue from './exception-queue';
@@ -41,7 +42,7 @@ export default function BookingExperience({store, preferredStaff, localDemo}: {s
   const [step, setStep] = useState(1);
   const {register, handleSubmit, formState: {errors: formErrors}} = useForm<BookingContact>({resolver: zodResolver(contactSchema), defaultValues: {name: '', phone: ''}});
   const [source, setSource] = useState<'line' | 'phone' | 'personal-line'>('line');
-  const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
+  const [requestKey, setRequestKey] = useState(requestId);
   const [confirmation, setConfirmation] = useState('');
   const [editing, setEditing] = useState<Booking | null>(null);
   const editOpener = useRef<HTMLElement | null>(null);
@@ -187,7 +188,7 @@ export default function BookingExperience({store, preferredStaff, localDemo}: {s
     {!localDemo && workspaceView === 'attendance' && <AttendancePanel store={store} />}
     {error && <p role="alert" className={styles.error}>{error}</p>}
     <section id="booking" hidden={workspaceView !== 'booking'} className={styles.panel}><div className={styles.heading}><div><span className={styles.eyebrow}>BOOK A VISIT</span><h2>預約服務</h2></div><span>{step === 4 ? '完成' : `${step} / 3`}</span></div>
-      {step === 4 ? <div className={styles.success} role="status"><div className={styles.check}>✓</div><h3>預約已成立</h3><p>{chosenService?.name} · {chosenStaff?.name}</p><p>{dateTime(slot, timezone)}</p><small>預約編號 {confirmation}</small><button type="button" className={styles.secondary} onClick={() => {setStep(1); setConfirmation(''); setSlot(''); setRequestKey(crypto.randomUUID());}}>再預約一筆</button></div> : <form onSubmit={handleSubmit(submit)}>
+      {step === 4 ? <div className={styles.success} role="status"><div className={styles.check}>✓</div><h3>預約已成立</h3><p>{chosenService?.name} · {chosenStaff?.name}</p><p>{dateTime(slot, timezone)}</p><small>預約編號 {confirmation}</small><button type="button" className={styles.secondary} onClick={() => {setStep(1); setConfirmation(''); setSlot(''); setRequestKey(requestId());}}>再預約一筆</button></div> : <form onSubmit={handleSubmit(submit)}>
         <div className={styles.progress} aria-label="預約進度"><span className={step >= 1 ? styles.active : ''}>服務與人員</span><span className={step >= 2 ? styles.active : ''}>日期與時間</span><span className={step >= 3 ? styles.active : ''}>聯絡與確認</span></div>
         {step === 1 && <div className={styles.fields}><label htmlFor="service">服務項目</label><select id="service" value={service} onChange={event => {const next = event.target.value; setSlot(''); setSlots([]); setService(next); if (staff !== 'any' && !catalog?.skills.some(skill => skill.staff_id === staff && skill.service_id === next)) setStaff(catalog?.skills.find(skill => skill.service_id === next)?.staff_id || '');}} required>{catalog?.services.map(item => <option key={item.id} value={item.id}>{item.name} · {item.duration_minutes} 分鐘</option>)}</select><label htmlFor="staff">美容師</label><select id="staff" value={staff} onChange={event => {setSlot(''); setSlots([]); setStaff(event.target.value);}} required>{!localDemo && <option value="any">由店家安排</option>}{qualified.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button type="button" className={styles.primary} disabled={!service || !staff} onClick={() => setStep(2)}>選擇時間</button></div>}
         {step === 2 && <div className={styles.fields}><label htmlFor="date">預約日期</label><input id="date" type="date" min={day(timezone)} value={date} onChange={event => {setSlot(''); setSlots([]); setDate(event.target.value);}} required/><fieldset className={styles.slotField}><legend>可預約時段</legend><div className={styles.slotGrid}>{slots.map(item => <label key={item} className={slot === item ? styles.chosenSlot : styles.slot}><input type="radio" name="start" value={item} checked={slot === item} onChange={() => setSlot(item)}/>{clock(item, timezone)}</label>)}</div>{slots.length === 0 && <p className={styles.helper}>這天尚無可用時段，請試試其他日期。</p>}</fieldset><div className={styles.actions}><button type="button" className={styles.secondary} onClick={() => setStep(1)}>上一步</button><button type="button" className={styles.primary} disabled={!slot} onClick={() => setStep(3)}>填寫資料</button></div></div>}
