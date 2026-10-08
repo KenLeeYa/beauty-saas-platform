@@ -14,6 +14,7 @@ Date: 2026-10-09 (Asia/Taipei). Source baseline: `9cf6dfe` plus the local contin
 | Corrected browser flow | Passed: 3 suites / 3 tests | Four synthetic roles, booking/cancellation, date/staff replacement, dialog focus, merchant walk-in/readback and CSV scope; 360/390/430/768/1280px screenshots under `.dev-logs/` |
 | Role entry defect | Fixed and verified | Next request internal host differed from browser Host; public origin reconstructed then checked against private-network allowlist |
 | Reception attendance defect | Fixed and verified | Backend correctly rejected receptionist; UI now hides the unavailable attendance entry, staff entry remains functional |
+| Owner mobile density | Fixed and verified | Six workspaces, one visible section; browser tests switch views and assert visible-section count; owner screenshots cover all five viewport widths |
 | Final lint/typecheck/build | Passed | Root npm lint and typecheck; Next build generated 60 static pages after final runtime changes |
 | Unit tests | 85 passed / 28 skipped in 57 files | 30 passed files / 27 skipped files; integration and browser cases run separately, not counted as unit passes |
 | LAN HTTP browser defect | Fixed and verified | `crypto.randomUUID` unavailable outside secure context; client request identifiers now use `getRandomValues` with v4 bits, covered by unit and actual LAN browser tests |

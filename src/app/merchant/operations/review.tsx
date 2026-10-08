@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { requestId } from "@/lib/line-booking/request-id";
+import { Clock, CalendarClock, Wallet, Gift, Shuffle, UsersRound } from "lucide-react";
+import styles from "./review.module.css";
 
 type Attendance = { id: string; profileId: string; kind: string;
   occurredAt: string; correctedAt: string | null };
@@ -26,6 +28,7 @@ export function OperationsReview({ organization, location }: {
   organization: string; location: string }) {
   const query = new URLSearchParams({ organization, location }).toString();
   const [data, setData] = useState<ReviewData | null>(null);
+  const [workspaceView, setWorkspaceView] = useState("timing");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [employee, setEmployee] = useState("");
@@ -251,12 +254,21 @@ export function OperationsReview({ organization, location }: {
     finally { setBusy(false); }
   }
   const name = (profileId: string) => data?.employees.find(row => row.id === profileId)?.name ?? profileId;
-  return <main style={{ maxWidth: 1080, margin: "2rem auto", padding: "1rem", fontFamily: "sans-serif" }}>
+  return <main className={styles.workspace} style={{ maxWidth: 1080, margin: "2rem auto", padding: "1rem", fontFamily: "sans-serif" }}>
     <a href={`/merchant/dashboard?${query}`}>← Merchant dashboard</a>
     <h1>Operations review</h1>
     <p>Location: {location}. Attendance corrections and payroll approvals preserve their source history.</p>
     {message && <p role="status">{message}</p>}
-    <section aria-label="Attendance review">
+    <nav aria-label="營運工作區" style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginBottom:16}}>
+      {[{id:"timing",label:"現場排程",icon:CalendarClock},{id:"benefits",label:"會員結帳",icon:Gift},
+        {id:"attendance",label:"出勤紀錄",icon:Clock},{id:"payroll",label:"薪資試算",icon:Wallet},
+        {id:"reassignment",label:"預約改派",icon:Shuffle},{id:"allocation",label:"多人抽成",icon:UsersRound}].map(item =>
+        <button key={item.id} type="button" aria-current={workspaceView===item.id ? "page" : undefined}
+          onClick={()=>setWorkspaceView(item.id)} style={{minHeight:44,display:"flex",alignItems:"center",gap:8,padding:8,
+            background:workspaceView===item.id ? "#e7f3f2" : "#fff",border:"1px solid #d8e0e6",borderRadius:4}}>
+          <item.icon size={20} aria-hidden="true"/>{item.label}</button>)}
+    </nav>
+    <section hidden={workspaceView !== "attendance"} aria-label="Attendance review">
       <h2>Attendance</h2>
       <a href={`/api/merchant/operations?${query}&format=csv`}>Download attendance CSV</a>
       <table><thead><tr><th>Employee</th><th>Event</th><th>Time</th><th>Review</th></tr></thead>
@@ -277,7 +289,7 @@ export function OperationsReview({ organization, location }: {
             }}>Approve overtime</button>}</td>
         </tr>)}</tbody></table>
     </section>
-    <section aria-label="Future booking reassignment">
+    <section hidden={workspaceView !== "reassignment"} aria-label="Future booking reassignment">
       <h2>Future booking reassignment</h2>
       <label>Current beautician <select value={sourceStaffId}
         onChange={event => setSourceStaffId(event.target.value)}><option value="">Select</option>
@@ -295,7 +307,7 @@ export function OperationsReview({ organization, location }: {
         <button disabled={busy || !targetStaffId} onClick={() => void reassign(booking.id)}>
           Reassign</button></li>)}</ul>
     </section>
-    <section aria-label="Payroll review">
+    <section hidden={workspaceView !== "payroll"} aria-label="Payroll review">
       <h2>Payroll shadow calculation</h2>
       <label>Employee <select value={employee} onChange={event => setEmployee(event.target.value)}>
         <option value="">Select</option>{data?.employees.map(row =>
@@ -330,7 +342,7 @@ export function OperationsReview({ organization, location }: {
             bookingRefundId: refundId, appliesOn: adjustDate,
             idempotencyKey: requestId() })}>Adjust {name(period.profileId)} {period.from.slice(0,10)}</button>)}
     </section>
-    <section aria-label="Benefit and commission review">
+    <section hidden={workspaceView !== "benefits"} aria-label="Benefit and commission review">
       <h2>Benefits and commission preview</h2>
       <p>New issuance and changes run only in the synthetic test environment.</p>
       <label>Customer ID <input value={customerId}
@@ -460,7 +472,7 @@ export function OperationsReview({ organization, location }: {
           Publish commission</button>}</p>)}
       {benefitResult !== null && <pre aria-label="Benefit result">{JSON.stringify(benefitResult,null,2)}</pre>}
     </section>
-    <section aria-label="Walk-in timing policy">
+    <section hidden={workspaceView !== "timing"} aria-label="Walk-in timing policy">
       <h2>Walk-in timing</h2>
       <p>Immediate dispatch requires a saved store policy. The online booking lead
         time can also apply to walk-ins.</p>
@@ -475,7 +487,7 @@ export function OperationsReview({ organization, location }: {
         Apply online minimum advance time</label>
       <button disabled={busy} onClick={() => void walkinRequest("PATCH")}>Save timing policy</button>
     </section>
-    <section aria-label="Multi-provider commission allocation">
+    <section hidden={workspaceView !== "allocation"} aria-label="Multi-provider commission allocation">
       <h2>Multi-provider commission</h2>
       <p>Preview and publish an explicit split before calculating payroll. Amounts are
         local test minor units; published versions are audited.</p>

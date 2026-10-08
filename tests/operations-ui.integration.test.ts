@@ -31,11 +31,15 @@ it.skipIf(!process.env.UNIFIED_UI_TEST_URL)(
       const response = await page.goto(url);
       expect(response?.status()).toBe(200);
       await page.getByRole("heading", { name: "Operations review" }).waitFor();
-      await page.getByRole("heading", { name: "Attendance" }).waitFor();
-      await page.getByRole("heading", { name: "Payroll shadow calculation" }).waitFor();
-      await page.getByRole("heading", { name: "Benefits and commission preview" }).waitFor();
+      expect(await page.locator("main > section:not([hidden])").count()).toBe(1);
+      for (const [tab,heading] of [["出勤紀錄","Attendance"],["薪資試算","Payroll shadow calculation"],
+        ["會員結帳","Benefits and commission preview"],["多人抽成","Multi-provider commission"]]) {
+        await page.getByRole("button",{name:tab,exact:true}).click();
+        await page.getByRole("heading",{name:heading}).waitFor();
+        expect(await page.locator("main > section:not([hidden])").count()).toBe(1);
+      }
+      await page.getByRole("button",{name:"現場排程",exact:true}).click();
       await page.getByRole("heading", { name: "Walk-in timing" }).waitFor();
-      await page.getByRole("heading", { name: "Multi-provider commission" }).waitFor();
       const timing = page.waitForResponse(response =>
         response.url().includes("/api/merchant/operations/walkin") &&
         response.request().method() === "GET");
@@ -50,6 +54,7 @@ it.skipIf(!process.env.UNIFIED_UI_TEST_URL)(
       const customer = await prisma.customers.findFirstOrThrow({ where: {
         organization_id:"11111111-1111-4111-8111-111111111111" },
         select:{ id:true } });
+      await page.getByRole("button",{name:"會員結帳",exact:true}).click();
       await page.getByLabel("Customer ID").fill(customer.id);
       const consent = page.waitForResponse(response =>
         response.url().includes("/api/merchant/customers/marketing-consent"));

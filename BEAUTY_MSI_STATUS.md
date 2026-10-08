@@ -27,6 +27,7 @@ Date: 2026-10-09 (Asia/Taipei).
 - Fixed stale slot selections on date/staff replacement and receptionist attendance navigation inconsistent with server permission.
 - Final local browser regression: three suites passed, including four synthetic roles and five viewport widths. Root lint/typecheck/build passed; 85 unit tests passed and 28 were explicitly skipped.
 - Fixed client UUID generation for private-network HTTP, including booking, attendance and synthetic merchant benefit/refund requests.
+- Split the owner's operations review into six selectable workspaces; only one section is visible at once, with clear form and touch-control styling.
 - Exact feature/test mapping and local/release/rollback handoff documents.
 
 ## Remaining validation

@@ -27,6 +27,8 @@ node scripts/msi-local.mjs ui $credentialFile
 
 These entry links mint synthetic sessions and do not test real LINE/Google sign-in. Use separate browser contexts for independent roles. Returning to the customer entry clears prior merchant cookies. Existing obligations and manual operations remain server-authorized.
 
+The owner's operations page starts in walk-in scheduling. Switch between member checkout, attendance, payroll, reassignment and commission allocation using the six workspace controls. Only one workspace is displayed at a time.
+
 ## Trial scenarios
 
 Customer: choose service/staff, date, time, change date, choose again, enter synthetic contact fields, confirm, open My bookings, reschedule dialog, cancel. Receptionist: open store agenda and manual booking; owner: review walk-in timing, member policy, commission, attendance and payroll. Beautician: own appointment scope and attendance. Real notifications, payment capture and payroll bank transfer remain disabled.
