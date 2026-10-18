@@ -10,6 +10,7 @@ import { merchantScopeSchema } from "@/server/merchant/schemas";
 import { getRequestId } from "@/server/security/request";
 
 const commandSchema = z.object({ bookingId: z.uuid(), targetStaffId: z.uuid(),
+  segmentId: z.uuid().optional(), allocationId: z.uuid().optional(),
   expectedVersion: z.number().int().positive().optional(),
   reason: z.string().trim().min(1).max(500) }).strict();
 

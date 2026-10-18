@@ -106,7 +106,8 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)(
         expect(emptyPage.total).toBe(first.total);
         expect(second.items.length).toBeGreaterThan(0);
         expect(first.items.some(row => second.items.some(other => other.segmentId === row.segmentId))).toBe(false);
-        expect(first.items.find(row => row.bookingId === booked.id)?.canReassign).toBe(false);
+        expect(first.items.filter(row => row.bookingId === booked.id && !row.allocationId)
+          .every(row => !row.canReassign)).toBe(true);
         throw Error("rollback pagination fixture");
       })).rejects.toThrow("rollback pagination fixture");
       expect((await prisma.booking_segments.findFirstOrThrow({ where: { booking_id: booked.id } })).assigned_staff_id).toBe(oldStaff);
@@ -224,3 +225,208 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)(
     }
   }, 60_000,
 );
+
+it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)("reassigns one participant across bundled services without changing retained arrangements", async () => {
+  loadEnvConfig(process.cwd());
+  const { prisma } = await import("../src/server/database/prisma");
+  const { reassignFutureBooking } = await import("../src/server/booking/reassignment");
+  const { listQualificationReviews } = await import("../src/server/booking/qualification-review");
+  const { setStaffCapability } = await import("../src/server/staff/service-capability");
+  const { randomToken, sha256 } = await import("../src/server/security/crypto");
+  const organizationId = "11111111-1111-4111-8111-111111111111";
+  const locationId = "22222222-2222-4222-8222-222222222221";
+  const organization = await prisma.organizations.findUniqueOrThrow({ where: { id: organizationId } });
+  const location = await prisma.locations.findUniqueOrThrow({ where: { id: locationId } });
+  const customer = await prisma.customers.findFirstOrThrow({ where: { organization_id: organizationId } });
+  const services = await prisma.location_services.findMany({ where: { organization_id: organizationId,
+    location_id: locationId, is_active: true }, take: 2 });
+  expect(services).toHaveLength(2);
+  const context: OrganizationContext = { session: { id: randomToken(16),
+    profileId: "33333333-3333-4333-8333-333333333301", email: "owner@example.test",
+    displayName: "Owner", platformRole: null, expiresAt: new Date(Date.now()+60000), csrfTokenHash: "" },
+    organization, location, roles: new Set(["ORGANIZATION_OWNER"]), allLocations: true,
+    accessibleLocationIds: new Set([locationId]), linkedStaffProfileId: null };
+  const staff = [];
+  for (const label of ["Primary", "Partner", "Replacement"]) {
+    const person = await prisma.staff_profiles.create({ data: { organization_id: organizationId,
+      display_name: `Bundle QA ${label} ${randomToken(4)}`, public_visible: false } });
+    staff.push(person);
+    await prisma.staff_location_assignments.create({ data: { organization_id: organizationId,
+      location_id: locationId, staff_profile_id: person.id } });
+    await prisma.staff_availability_rules.createMany({ data: Array.from({ length: 7 }, (_, day) => ({
+      organization_id: organizationId, location_id: locationId, staff_profile_id: person.id,
+      day_of_week: day, starts_at: new Date("1970-01-01T00:00:00Z"), ends_at: new Date("1970-01-01T23:59:00Z"),
+    })) });
+    await prisma.service_staff_assignments.createMany({ data: services.map(service => ({
+      organization_id: organizationId, location_service_id: service.id, staff_profile_id: person.id,
+    })) });
+  }
+  const [primary, partner, replacement] = staff;
+  const resourceType = await prisma.resource_types.findFirstOrThrow({ where: { organization_id: organizationId } });
+  const resource = await prisma.resources.create({ data: { organization_id: organizationId, location_id: locationId,
+    resource_type_id: resourceType.id, name: `Bundle QA resource ${randomToken(6)}` } });
+  const start = new Date(Date.now()+3*86400000); start.setUTCHours(3, 0, 0, 0);
+  const booking = await prisma.bookings.create({ data: { organization_id: organizationId,
+    location_id: locationId, customer_id: customer.id, status: "CONFIRMED", subtotal_minor: 200000,
+    discount_minor: 10000, total_minor: 190000, deposit_required_minor: 20000,
+    policy_snapshot: { synthetic: "retained terms" }, tracking_token_hash: sha256(randomToken(32)), is_test: true } });
+  const segments = [];
+  for (let index = 0; index < 2; index++) {
+    const startsAt = new Date(start.getTime()+index*2*3600000);
+    const endsAt = new Date(startsAt.getTime()+3600000);
+    const segment = await prisma.booking_segments.create({ data: { organization_id: organizationId,
+      location_id: locationId, booking_id: booking.id, service_variant_id: services[index].service_variant_id,
+      assigned_staff_id: primary.id, staff_name_snapshot: primary.display_name,
+      service_name_snapshot: `Bundle service ${index+1}`, variant_name_snapshot: `Variant ${index+1}`,
+      starts_at: startsAt, ends_at: endsAt, duration_minutes: 60, price_minor: 100000,
+      pre_buffer_minutes: 5, post_buffer_minutes: 10, sort_order: index } });
+    segments.push(segment);
+    await prisma.booking_resource_allocations.create({ data: { organization_id: organizationId,
+      location_id: locationId, booking_id: booking.id, booking_segment_id: segment.id, resource_id: resource.id,
+      starts_at: startsAt, ends_at: endsAt } });
+    await prisma.booking_staff_allocations.createMany({ data: [primary, partner].map(person => ({
+      organization_id: organizationId, location_id: locationId, booking_id: booking.id,
+      booking_segment_id: segment.id, staff_profile_id: person.id,
+      starts_at: new Date(startsAt.getTime()-300000), ends_at: new Date(endsAt.getTime()+600000),
+    })) });
+  }
+  await prisma.$executeRaw`insert into public.booking_dispatch_claims
+    (organization_id, location_id, service_variant_id, staff_profile_id, booking_id,
+      idempotency_hash, mode, starts_at, status, expires_at)
+    values (${organizationId}::uuid, ${locationId}::uuid, ${services[1].service_variant_id}::uuid,
+      ${primary.id}::uuid, ${booking.id}::uuid, ${sha256(randomToken(32))}, 'IMMEDIATE',
+      ${segments[1].starts_at}, 'CONFIRMED', ${segments[1].ends_at})`;
+  const snapshot = () => prisma.bookings.findUniqueOrThrow({ where: { id: booking.id }, include: {
+    booking_segments: { orderBy: { sort_order: "asc" } }, booking_staff_allocations: { orderBy: { id: "asc" } },
+    booking_resource_allocations: true } });
+  const before = await snapshot();
+  try {
+    for (const service of services) {
+      const assignment = await prisma.service_staff_assignments.findFirstOrThrow({ where: {
+        location_service_id: service.id, staff_profile_id: partner.id } });
+      await setStaffCapability({ context, assignmentId: assignment.id,
+        effectiveFrom: new Date("2020-01-01T00:00:00Z"), effectiveUntil: start,
+        onlineSelectable: true, walkInEligible: true, reason: "Synthetic partner qualification expired" });
+    }
+    const pending = (await listQualificationReviews(context)).items.filter(row => row.bookingId === booking.id);
+    expect(pending).toHaveLength(2);
+    expect(pending.every(row => row.staffId === partner.id && row.canReassign)).toBe(true);
+    const selected = pending.find(row => row.segmentId === segments[0].id)!;
+    const command = { context, bookingId: booking.id, segmentId: selected.segmentId,
+      allocationId: selected.allocationId!, expectedVersion: selected.bookingVersion,
+      targetStaffId: replacement.id, reason: "Replace only selected partner", requestId: randomToken(12) };
+    await expect(reassignFutureBooking({ ...command, expectedVersion: undefined })).rejects.toMatchObject({ status: 400 });
+    await expect(reassignFutureBooking({ ...command, segmentId: undefined, allocationId: undefined }))
+      .rejects.toMatchObject({ status: 409 });
+    await expect(reassignFutureBooking({ ...command, context: { ...context, organization: { ...organization,
+      id: "11111111-1111-4111-8111-111111111112" } } })).rejects.toMatchObject({ status: 404 });
+    await expect(reassignFutureBooking({ ...command, allocationId: before.booking_staff_allocations
+      .find(row => row.booking_segment_id === segments[1].id)!.id })).rejects.toMatchObject({ status: 409 });
+    await expect(reassignFutureBooking({ ...command, targetStaffId: primary.id })).rejects.toMatchObject({ status: 409 });
+    await expect(reassignFutureBooking({ ...command, context: { ...context,
+      roles: new Set(["SERVICE_PROVIDER"]) } })).rejects.toMatchObject({ status: 403 });
+    await expect(reassignFutureBooking({ ...command, context: { ...context, location: { ...location,
+      id: "22222222-2222-4222-8222-222222222222" } } })).rejects.toMatchObject({ status: 404 });
+    expect(await snapshot()).toEqual(before);
+    const occupied = await prisma.booking_staff_allocations.create({ data: { organization_id: organizationId,
+      location_id: locationId, booking_id: booking.id, booking_segment_id: segments[1].id,
+      staff_profile_id: replacement.id, starts_at: segments[0].starts_at, ends_at: segments[0].ends_at } });
+    try {
+      await expect(reassignFutureBooking(command)).rejects.toBeDefined();
+      expect((await snapshot()).booking_staff_allocations.filter(row => row.id !== occupied.id))
+        .toEqual(before.booking_staff_allocations);
+      expect(await prisma.booking_events.count({ where: { booking_id: booking.id, event_type: "STAFF_REASSIGNED" } })).toBe(0);
+    } finally { await prisma.booking_staff_allocations.delete({ where: { id: occupied.id } }); }
+    if (process.env.UNIFIED_UI_TEST_URL) {
+      const { createApplicationSession } = await import("../src/server/auth/session");
+      const material = await createApplicationSession({ profileId: context.session.profileId });
+      const base = process.env.UNIFIED_UI_TEST_URL;
+      const browser = await chromium.launch({ executablePath:
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", headless: true });
+      try {
+        const browserContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+        await browserContext.addCookies([{ name: "beauty_session", value: material.sessionToken, url: base },
+          { name: "beauty_csrf", value: material.csrfToken, url: base }]);
+        const page = await browserContext.newPage();
+        const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+        await page.goto(`${base}/merchant/operations?organization=${organization.slug}&location=${location.slug}`);
+        await page.getByRole("button", { name: "預約改派", exact: true }).click();
+        const panel = page.getByLabel("資格異動待處理預約", { exact: true });
+        const row = panel.locator(`li[data-allocation-id="${selected.allocationId}"]`);
+        await row.getByRole("button", { name: "選擇改派人員" }).click();
+        await panel.getByLabel("改派美容師").selectOption(replacement.id);
+        await panel.getByLabel("改派原因").fill(command.reason);
+        expect(await panel.getByLabel("保留安排").textContent()).toContain(primary.display_name);
+        expect(await panel.getByLabel("保留安排").textContent()).toContain("Bundle service 2");
+        for (const width of [390, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          await panel.getByRole("button", { name: "確認改派", exact: true }).scrollIntoViewIfNeeded();
+          await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+          expect(await page.locator("html").evaluate(element => element.scrollWidth <= innerWidth)).toBe(true);
+          expect(await panel.getByRole("button", { name: "確認改派", exact: true }).isVisible()).toBe(true);
+          await page.screenshot({ path: `.dev-logs/bundle-reassignment-${width}.png`, fullPage: true });
+        }
+        const saved = page.waitForResponse(response => response.url().includes("/bookings/reassign") && response.request().method() === "PATCH");
+        const leave = await prisma.staff_time_off.create({ data: { organization_id: organizationId,
+          location_id: locationId, staff_profile_id: replacement.id, starts_at: segments[0].starts_at,
+          ends_at: segments[0].ends_at, reason: "UI failure and retry" } });
+        try {
+          await panel.getByRole("button", { name: "確認改派", exact: true }).click();
+          expect((await saved).status()).toBe(409);
+          await panel.getByRole("alert").waitFor();
+          expect(await snapshot()).toEqual(before);
+        } finally { await prisma.staff_time_off.delete({ where: { id: leave.id } }); }
+        const retried = page.waitForResponse(response => response.url().includes("/bookings/reassign") && response.request().method() === "PATCH");
+        await panel.getByRole("button", { name: "確認改派", exact: true }).click();
+        expect((await retried).status()).toBe(200);
+        await row.waitFor({ state: "detached" });
+        expect(await panel.locator(`li[data-segment-id="${segments[1].id}"]`).count()).toBe(1);
+        expect(errors).toEqual([]);
+      } finally { await browser.close(); }
+    } else { await reassignFutureBooking(command); }
+    const after = await snapshot();
+    expect(after.booking_segments).toEqual(before.booking_segments);
+    expect(after.booking_resource_allocations).toEqual(before.booking_resource_allocations);
+    expect(after.booking_staff_allocations.filter(row => row.staff_profile_id !== replacement.id))
+      .toEqual(before.booking_staff_allocations.filter(row => row.id !== selected.allocationId));
+    const inserted = after.booking_staff_allocations.find(row => row.staff_profile_id === replacement.id)!;
+    const removed = before.booking_staff_allocations.find(row => row.id === selected.allocationId)!;
+    expect([inserted.starts_at, inserted.ends_at, inserted.booking_segment_id])
+      .toEqual([removed.starts_at, removed.ends_at, removed.booking_segment_id]);
+    expect([after.total_minor, after.subtotal_minor, after.discount_minor, after.deposit_required_minor, after.policy_snapshot])
+      .toEqual([before.total_minor, before.subtotal_minor, before.discount_minor, before.deposit_required_minor, before.policy_snapshot]);
+    await expect(reassignFutureBooking(command)).rejects.toMatchObject({ status: 409 });
+    const next = (await listQualificationReviews(context)).items.filter(row => row.bookingId === booking.id);
+    expect(next).toHaveLength(1);
+    await reassignFutureBooking({ ...command, segmentId: next[0].segmentId,
+      allocationId: next[0].allocationId!, expectedVersion: next[0].bookingVersion });
+    expect((await listQualificationReviews(context)).items.filter(row => row.bookingId === booking.id)).toEqual([]);
+    expect(await prisma.notification_outbox.count({ where: { booking_id: booking.id, event_type: "BOOKING_RESCHEDULED" } })).toBe(2);
+    const current = await snapshot();
+    const originalPrimary = current.booking_staff_allocations.find(row => row.booking_segment_id === segments[0].id && row.staff_profile_id === primary.id)!;
+    await expect(reassignFutureBooking({ ...command, allocationId: originalPrimary.id,
+      expectedVersion: current.version, targetStaffId: partner.id })).rejects.toMatchObject({ status: 409 });
+    const partnerQualification = await prisma.service_staff_assignments.findFirstOrThrow({ where: {
+      location_service_id: services[0].id, staff_profile_id: partner.id } });
+    await setStaffCapability({ context, assignmentId: partnerQualification.id,
+      effectiveFrom: new Date("2020-01-01T00:00:00Z"), effectiveUntil: null,
+      onlineSelectable: true, walkInEligible: true, reason: "Restore synthetic partner" });
+    await reassignFutureBooking({ ...command, allocationId: originalPrimary.id,
+      expectedVersion: current.version, targetStaffId: partner.id });
+    const changedPrimary = await snapshot();
+    expect(changedPrimary.booking_segments[0].assigned_staff_id).toBe(partner.id);
+    expect(changedPrimary.booking_segments[0].staff_name_snapshot).toBe(partner.display_name);
+    expect(changedPrimary.booking_segments[1]).toEqual(current.booking_segments[1]);
+    expect(changedPrimary.booking_staff_allocations.filter(row => row.staff_profile_id !== partner.id))
+      .toEqual(current.booking_staff_allocations.filter(row => row.id !== originalPrimary.id));
+    const dispatchEvents = await prisma.$queryRaw<{ count: number }[]>`select count(*)::integer as count
+      from public.booking_dispatch_events where booking_id = ${booking.id}::uuid`;
+    expect(dispatchEvents[0].count, "unrelated segment rotation must stay untouched").toBe(0);
+  } finally {
+    await prisma.bookings.update({ where: { id: booking.id }, data: { status: "CANCELLED" } });
+    await prisma.booking_staff_allocations.updateMany({ where: { booking_id: booking.id }, data: { is_blocking: false } });
+    await prisma.booking_resource_allocations.updateMany({ where: { booking_id: booking.id }, data: { is_blocking: false } });
+    await prisma.resources.update({ where: { id: resource.id }, data: { is_active: false } });
+    await prisma.staff_profiles.updateMany({ where: { id: { in: staff.map(row => row.id) } }, data: { is_active: false } });
+  }
+}, 60000);

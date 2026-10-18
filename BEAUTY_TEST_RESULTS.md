@@ -1,5 +1,44 @@
 # Test evidence
 
+## 2026-10-18 multi-service and multi-provider reassignment
+
+Baseline: `dcbd7913b766f5ea3ecd7c5d4436b901406138f5` plus this increment.
+This supersedes the multi-service restriction in the preceding increment below.
+Only the isolated loopback `beauty_msi_20261009` database and local Edge were used.
+
+Entry: merchant operations -> booking reassignment -> qualification review.
+Each affected blocking staff allocation now has its own review item, including
+secondary providers. The merchant confirms one service/participant at a time;
+the booking version must be refreshed before processing another affected item.
+Confirmation displays the selected replacement and retained arrangements, excludes
+existing participants from the target selector, and focuses the selector on entry.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Before-fix reproduction | Failed as expected | Two expired secondary-provider assignments were absent from the worklist (expected 2, received 0) |
+| Precise replacement | Passed | Two services with two providers each; replacing one secondary provider preserves both segment snapshots and every other staff allocation, including IDs and buffered intervals |
+| Financial/resource preservation | Passed | Two actual resource allocations, prices, discount, deposit and policy snapshot compare equal before/after reassignment |
+| Primary replacement | Passed | Only the selected service's primary identity/name changes; other service and secondary-provider allocations remain unchanged |
+| Sequential changes | Passed | Same replacement provider can take both non-overlapping services; one remaining review after first confirmation, none after second, two distinct outbox events |
+| Authorization and selection | Passed | Provider, foreign tenant and branch rejected; missing version, ambiguous legacy command, mismatched segment/allocation and already-participating target rejected without mutation |
+| Failure and concurrency | Passed | Actual GiST occupancy collision rolls back allocation and event writes; off-shift and unqualified replacements rejected; stale confirmation rejected; existing same-version race retains one winner |
+| Dispatch accounting | Passed | An IMMEDIATE claim for the other service/provider receives no compensation or reassignment events; existing owner-only and one-time dispatch tests still pass |
+| Local UI | Passed | 5 tests across 4 files, final run 16:22 local time; actual PATCH conflict retains data/form, retry succeeds, remaining service stays queued; customer, operations and four-role/LAN regressions pass |
+| Responsive inspection | Passed | Edge screenshots manually inspected at 390px and 1440px; no horizontal overflow or page errors; full-page screenshot waits for paint after scrolling controls into view |
+| Local DB suite | Passed | 26 tests / 24 files; multi-service scenarios also rerun in final browser suite against the live local server |
+| Root gates | Passed | Lint 0 errors / 1 preexisting login-navigation warning; typecheck; production build; 104 unit tests passed / 29 gated tests skipped; npm audit 0 vulnerabilities |
+| Schema/RLS | Not changed | No migration, policy, grant or table changes; tenant/branch tests exercise scoped service queries, not a new local pgTAP run |
+| Release boundary | Held | PR #2 only, no merge/deploy or provider writes; Vercel Git link readback remains null before push |
+
+Ignored evidence: `.dev-logs/multi-*.log` and `bundle-reassignment-{390,1440}.png`.
+Synthetic bookings are cancelled and their allocations released after each new
+bundle test; synthetic staff/resources are deactivated, preserving audit history.
+Legacy manual lookup remains a single-service/single-provider compatibility path.
+Missing allocation links fail closed; immediate dispatch retains its existing
+one-time owner override policy. No physical-phone, live provider, notification
+delivery or Production verification is claimed. AOCI closing and pushed-revision
+CI readbacks are recorded separately on PR #2 after files stabilize.
+
 ## 2026-10-18 qualification-change review and confirmed reassignment
 
 Baseline: `cc97237046386c49034536d83ca19d245adf0841` plus this PR increment.

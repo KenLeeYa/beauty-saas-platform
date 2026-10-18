@@ -30,11 +30,16 @@ function localClock(value: Date, timezone: string): string {
 
 export async function reassignFutureBooking(input: { context: OrganizationContext;
   bookingId: string; targetStaffId: string; reason: string; requestId: string;
-  expectedVersion?: number }): Promise<void> {
+  expectedVersion?: number; segmentId?: string; allocationId?: string }): Promise<void> {
   assertCapability(input.context, "booking.manage");
   const location = requireLocation(input.context);
   const reason = input.reason.trim();
   if (!reason || reason.length > 500) throw new AppError("BAD_REQUEST", "Reason required", 400);
+  const precise = input.segmentId !== undefined || input.allocationId !== undefined;
+  if (precise && (!input.segmentId || !input.allocationId || !Number.isInteger(input.expectedVersion) ||
+      input.expectedVersion! < 1)) {
+    throw new AppError("BAD_REQUEST", "Segment, allocation and version are required together", 400);
+  }
   await prisma.$transaction(async transaction => {
     const locked = await transaction.$queryRaw<{ id: string }[]>(Prisma.sql`
       select id from public.bookings
@@ -46,26 +51,31 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
     if (!locked[0]) throw new AppError("NOT_FOUND", "Booking not found", 404);
     const booking = await transaction.bookings.findUniqueOrThrow({ where: { id: input.bookingId },
       select: { status: true, version: true, customer_id: true, service_started_at: true,
-        booking_segments: { orderBy: { sort_order: "asc" }, select: {
+        booking_segments: { where: { organization_id: input.context.organization.id, location_id: location.id }, orderBy: { sort_order: "asc" }, select: {
           id: true, assigned_staff_id: true, starts_at: true, ends_at: true,
           service_variant_id: true, pre_buffer_minutes: true,
           post_buffer_minutes: true,
-        } }, booking_staff_allocations: { where: { is_blocking: true }, select: {
+        } }, booking_staff_allocations: { where: { is_blocking: true,
+          organization_id: input.context.organization.id, location_id: location.id }, select: {
           id: true, staff_profile_id: true, starts_at: true, ends_at: true,
           booking_segment_id: true,
         } } } });
-    const segment = booking.booking_segments[0];
+    const segment = precise ? booking.booking_segments.find(row => row.id === input.segmentId) : booking.booking_segments[0];
     if (input.expectedVersion !== undefined && booking.version !== input.expectedVersion) {
       throw new AppError("CONFLICT", "Booking changed; refresh before reassignment", 409);
     }
-    const old = booking.booking_staff_allocations[0];
+    const old = precise ? booking.booking_staff_allocations.find(row => row.id === input.allocationId) : booking.booking_staff_allocations[0];
     if (!["CONFIRMED", "PENDING_PAYMENT"].includes(booking.status) || booking.service_started_at ||
-        booking.booking_segments.length !== 1 || !segment || !old ||
-        booking.booking_staff_allocations.length !== 1 ||
+        (!precise && (booking.booking_segments.length !== 1 || booking.booking_staff_allocations.length !== 1)) ||
+        !segment || !old || old.booking_segment_id !== segment.id ||
         segment.starts_at <= new Date() || !segment.service_variant_id) {
       throw new AppError("CONFLICT", "Booking cannot be reassigned", 409);
     }
     if (old.staff_profile_id === input.targetStaffId) return;
+    if (segment.assigned_staff_id === input.targetStaffId || booking.booking_staff_allocations.some(row =>
+      row.booking_segment_id === segment.id && row.staff_profile_id === input.targetStaffId)) {
+      throw new AppError("CONFLICT", "Target already participates in this service", 409);
+    }
     const target = await transaction.staff_profiles.findFirst({ where: {
       id: input.targetStaffId, organization_id: input.context.organization.id,
       is_active: true, staff_location_assignments: { some: {
@@ -131,12 +141,18 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
     `);
     if (!schedule[0]?.allowed) throw new AppError("CONFLICT", "Target is off shift", 409);
     const priorDispatch = await transaction.$queryRaw<{ id: string; mode: string }[]>(Prisma.sql`
-      select id, mode from public.booking_dispatch_claims
-      where organization_id = ${input.context.organization.id}::uuid
-        and location_id = ${location.id}::uuid
-        and booking_id = ${input.bookingId}::uuid and status = 'CONFIRMED'
-      for update
+      select claim.id, claim.mode from public.booking_dispatch_claims claim
+      where claim.organization_id = ${input.context.organization.id}::uuid
+        and claim.location_id = ${location.id}::uuid
+        and claim.booking_id = ${input.bookingId}::uuid and claim.status = 'CONFIRMED'
+        and claim.service_variant_id = ${segment.service_variant_id}::uuid
+        and claim.starts_at = ${segment.starts_at}
+        and (claim.staff_profile_id = ${old.staff_profile_id}::uuid or exists (
+          select 1 from public.booking_dispatch_events event where event.claim_id = claim.id
+            and event.event_type = 'REASSIGNED' and event.staff_profile_id = ${old.staff_profile_id}::uuid))
+      for update of claim
     `);
+    if (priorDispatch.length > 1) throw new AppError("CONFLICT", "Ambiguous dispatch assignment", 409);
     if (priorDispatch[0]) {
       if (priorDispatch[0].mode === "IMMEDIATE" &&
           !input.context.roles.has("ORGANIZATION_OWNER")) {
@@ -149,15 +165,17 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
       if (changes.length) throw new AppError("CONFLICT", "Dispatch booking already reassigned", 409);
     }
     // Inserting the new blocking allocation first lets the GiST exclusion reject a busy target.
-    await transaction.booking_staff_allocations.create({ data: {
+    const replacement = await transaction.booking_staff_allocations.create({ data: {
       organization_id: input.context.organization.id, location_id: location.id,
       booking_id: input.bookingId, booking_segment_id: segment.id,
       staff_profile_id: target.id, starts_at: old.starts_at, ends_at: old.ends_at,
     } });
     await transaction.booking_staff_allocations.delete({ where: { id: old.id } });
-    await transaction.booking_segments.update({ where: { id: segment.id }, data: {
-      assigned_staff_id: target.id, staff_name_snapshot: target.display_name,
-    } });
+    if (segment.assigned_staff_id === old.staff_profile_id) {
+      await transaction.booking_segments.update({ where: { id: segment.id }, data: {
+        assigned_staff_id: target.id, staff_name_snapshot: target.display_name,
+      } });
+    }
     await transaction.bookings.update({ where: { id: input.bookingId },
       data: { version: { increment: 1 } } });
     await transaction.booking_events.create({ data: {
@@ -165,6 +183,7 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
       booking_id: input.bookingId, event_type: "STAFF_REASSIGNED",
       actor_profile_id: input.context.session.profileId, reason_code: "STAFF_CHANGE",
       metadata: { oldStaffId: old.staff_profile_id, newStaffId: target.id,
+        segmentId: segment.id, oldAllocationId: old.id, newAllocationId: replacement.id,
         reason, requestId: input.requestId },
     } });
     if (priorDispatch[0]) {
@@ -201,9 +220,9 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
       organization_id: input.context.organization.id, location_id: location.id,
       booking_id: input.bookingId, customer_id: booking.customer_id,
       event_type: "BOOKING_RESCHEDULED",
-      payload: { bookingId: input.bookingId, staffId: target.id,
+      payload: { bookingId: input.bookingId, segmentId: segment.id, staffId: target.id,
         startsAt: segment.starts_at.toISOString(), reason: "staff changed" },
-      idempotency_key: `booking:${input.bookingId}:staff:${target.id}`,
+      idempotency_key: `booking:${input.bookingId}:reassignment:${booking.version + 1}`,
     } });
   });
 }

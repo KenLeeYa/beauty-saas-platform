@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, RefreshCw, Shuffle } from "lucide-react";
 import type { listQualificationReviews } from "@/server/booking/qualification-review";
 import { formatLocalDateTime } from "@/lib/presentation/date-time";
@@ -20,6 +20,10 @@ export function QualificationReview({ query, staff }: {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const targetControl = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    if (selected) targetControl.current?.focus();
+  }, [selected]);
   const load = useCallback(async (signal?: AbortSignal) => {
       const response = await fetch(`/api/merchant/bookings/reassign?${query}&review=qualification&offset=${offset}`,
         { cache: "no-store", signal });
@@ -55,6 +59,7 @@ export function QualificationReview({ query, staff }: {
         method: "PATCH", headers: { "content-type": "application/json",
           "x-csrf-token": cookie ? decodeURIComponent(cookie.split("=").slice(1).join("=")) : "" },
         body: JSON.stringify({ bookingId: selected.bookingId, expectedVersion: selected.bookingVersion,
+          segmentId: selected.segmentId, allocationId: selected.allocationId,
           targetStaffId: target, reason: reason.trim() }),
       });
       const result = await response.json() as { error?: { message: string } };
@@ -76,20 +81,30 @@ export function QualificationReview({ query, staff }: {
     {message && <p role="status">{message}</p>}
     {!loading && data?.total === 0 && <p>目前沒有資格異動待處理預約</p>}
     {!loading && data && <ul style={{ padding: 0, listStyle: "none" }}>{data.items.map(item =>
-      <li key={item.segmentId} data-segment-id={item.segmentId} style={{ padding: "12px 0", borderBottom: "1px solid #d8e0e6", overflowWrap: "anywhere" }}>
+      <li key={item.allocationId ?? `${item.segmentId}:${item.staffId}`} data-segment-id={item.segmentId}
+        data-allocation-id={item.allocationId} style={{ padding: "12px 0", borderBottom: "1px solid #d8e0e6", overflowWrap: "anywhere" }}>
         <strong>{item.serviceName}</strong>
         <div>{formatLocalDateTime(item.startsAt, data.timezone)}</div>
         <div>{item.staffName} · 資格未涵蓋預約時間</div>
         {item.canReassign ? <button type="button" disabled={busy} onClick={() => {
           setSelected(item); setTarget(""); setReason(""); setError(""); setMessage("");
         }}><Shuffle size={18} aria-hidden="true" /> 選擇改派人員</button>
-          : <p>多項目或多人預約，需由店家個別處理</p>}
+          : <p>缺少人員時段配置，請先確認原預約資料</p>}
       </li>)}</ul>}
     {selected && <form aria-label="確認資格異動改派" onSubmit={event => { event.preventDefault(); void confirm(); }}>
-      <h4>{selected.serviceName} · {selected.staffName}</h4>
-      <label>改派美容師<select required value={target} disabled={busy}
+      <h4>本次替換：{selected.serviceName} · {selected.staffName}</h4>
+      <div aria-label="保留安排" style={{ overflowWrap: "anywhere" }}>
+        <strong>保留安排</strong>
+        {selected.arrangements.map(part => {
+          const retained = part.staff.filter(person => person.allocationId !== selected.allocationId);
+          return <p key={part.segmentId}>{part.serviceName} · {formatLocalDateTime(part.startsAt, data!.timezone)}
+            {retained.length > 0 && <> · {retained.map(person => person.name).join("、")}</>}</p>;
+        })}
+      </div>
+      <label>改派美容師<select ref={targetControl} required value={target} disabled={busy}
         onChange={event => setTarget(event.target.value)}>
-        <option value="">請選擇</option>{staff.filter(row => row.id !== selected.staffId).map(row =>
+        <option value="">請選擇</option>{staff.filter(row => !selected.arrangements
+          .find(part => part.segmentId === selected.segmentId)?.staff.some(person => person.staffId === row.id)).map(row =>
           <option key={row.id} value={row.id}>{row.name}</option>)}
       </select></label>
       <label>改派原因<textarea required maxLength={500} value={reason} disabled={busy}
