@@ -1,5 +1,76 @@
 # Test evidence
 
+## 2026-10-18 paid CRM and staff-read security regression
+
+Baseline: `7a725cda196c0f86924840687f6f7ea7ef813e2b` plus the security changes
+in this PR update. Tests used only `beauty_msi_20261009` on loopback PostgreSQL,
+Node 24.18.0, and local Edge; no provider or Production writes were performed.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Before-fix reproduction | Failed as expected | 5/9 focused assertions failed; DB regressions reproduced a disabled-CRM status write returning 200 and an unlinked own-read context returning branch bookings |
+| Blacklist add-on enforcement | Passed | Status service requires CUSTOMER_BLACKLIST for both enable and clear, matching the existing customer-edit policy; DENY returns 403 for organization/location scopes with no events or success audit; ALLOW permits mutation and eligibility readback |
+| CRM activation enforcement | Passed | Disabled CRM rejects status writes, including VIP, and marketing-consent reads through real authenticated route handlers; VIP does not require the blacklist add-on |
+| Staff read confinement | Passed | Unlinked own-read context fails 403 before business queries; linked reads constrain organization, location and assigned staff, including the returned segment; owner-wide reads remain valid |
+| Focused unit regressions | Passed | 11 assertions across customer-status.test.ts and merchant/data.test.ts |
+| Root quality gates | Passed | Lint: 0 errors, 1 preexisting login navigation warning; typecheck; local production build; source readiness check |
+| Unit suite | Passed subset | 104 passed, 28 intentionally gated integration/UI tests skipped; skips are not passes |
+| Database suite | Passed | 25 tests in 24 files, including new paid-feature HTTP cases, disabled-module reads/writes and staff data readback |
+| Browser suite | Passed | 3/3 actual Edge suites: customer booking/reselection/cancellation, role routing and operations; 390px blacklist deny/allow/clear and VIP controls with database readback; LAN address 192.168.1.104 |
+| Browser test correction | Resolved | Initial new status test used an exact label that included nested select-option text; corrected the locator to the existing accessible label, then all browser suites passed; no application bypass or timeout increase |
+| Dependency audit | Passed | npm audit --audit-level moderate: 0 vulnerabilities; no audit exceptions |
+| Schema/RLS change | Not applicable to this increment | No migration, grant or RLS policy changed; the earlier fresh-Supabase 29/29 result below is historical, not a new local run |
+| Release boundary | Held | Update PR #2 only; no merge or deployment. CI results are recorded on the pushed revision, separately from these local results |
+
+Paid-feature failure leaves existing blacklist rules effective; this change does
+not silently remove restrictions on subscription loss. Clearing a blacklist
+continues to require the add-on, consistent with the existing customer-edit API.
+Subscription-loss remediation policy remains a product decision, not an implied
+free bypass. Module gates and paid entitlements do not replace role or tenant checks.
+
+Remaining follow-up: staff qualification changes still do not automatically
+queue or reassign affected future bookings. That workflow gap is not fixed by
+this authorization patch; existing manual future-booking review/reassignment
+remains separate. Real Google/LINE OAuth, notification delivery, settlement,
+physical-phone operation, and every commercial endpoint are not certified by
+these synthetic tests. The legacy pnpm workspace is outside the root runtime.
+
+## 2026-10-18 resumed database and browser QA
+
+Revision: `7a725cda196c0f86924840687f6f7ea7ef813e2b`. These results supersede
+the Docker-blocked row below. Only the synthetic loopback database
+`beauty_msi_20261009` was changed; no Production database or provider was used.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Fresh Supabase CI | Passed | Run 39086798491: migrations, 29/29 pgTAP assertions and database lint; CI 39086798507 and Security 39086798500 also passed on this revision |
+| Local FORCE RLS migration | Passed | Applied `20261018010000_force_application_rls.sql` transactionally to the synthetic clone; public tables lacking FORCE RLS decreased from 36 to 0 |
+| DB regression after migration | Passed | `msi-local.mjs test`: 25 tests in 24 files; tenant/branch boundaries, identity proof, booking concurrency, member ledger, attendance and payroll invariants |
+| Browser regression after migration | Passed | `msi-local.mjs ui`: 3 tests in 3 files using actual Edge and synthetic authenticated identities |
+| Customer flow | Passed within tested scope | Service/staff/date/time selection and reselection, required contact validation, confirmation with DB readback, cancellation with DB readback; reschedule dialog focus/Escape checked, reschedule submission covered by integration rather than browser |
+| Staff and receptionist | Passed within tested scope | Assigned agenda entry, role-specific attendance visibility, no customer booking panel leakage, independent browser contexts |
+| Owner operations | Passed within tested scope | One visible workspace, tab switching, walk-in timing save/readback, consent-history and benefit-rule reads, scoped attendance CSV |
+| Responsive and LAN | Passed in browser | Widths 360/390/430/768/1280; no horizontal overflow or page errors in role cases. Final three-suite rerun used current LAN address `192.168.1.104:3100`; actual physical phone not tested |
+| Visual inspection | Passed for sampled screens | Booking confirmation and owner operations screenshots at 390px show readable content without overlap; artifacts remain ignored under `.dev-logs/` |
+| AOCI complete delivery | Passed | User-approved 4000-token setting; latest complete transport before final maintenance: 21/21 chunks, 483/483 entries, Challenge 10/10, no truncation. Transport verification and final governance alignment are separate evidence |
+| AOCI maintenance and closing | Passed | All 203 original candidates applied; 13 selected entry refinements completed. Final Code volume: 528 entries; missing/stale/unbaselined/orphan 0; Verify and Check aligned; Guide complete=true, next_action=none. Two oversized PNG assets are technical skips; no Database volume is configured |
+| Test resource cleanup | Passed | Beauty Next listener stopped; `line-booking-test-20261004` stopped with database and volume retained. Shared Docker Desktop remains available for another project's active test container |
+| Merge, deployment and live provider verification | Not performed | PR #2 remains held. Real Google/LINE sign-in, notification delivery, payment settlement and physical-device testing are not established by synthetic QA |
+
+No new runtime defect was reproduced in this continuation. These selected
+regressions do not certify every commercial feature or authorize release.
+
+Source-review follow-ups, not verified exploits: the newer customer-status
+service does not resolve the paid blacklist entitlement; staff capability
+changes do not automatically queue affected future bookings; merchant own-booking
+filtering relies on callers establishing a linked staff profile. These need
+focused negative tests before broader feature activation. Current evidence
+does not claim every commercial endpoint is fully secured.
+
+PR #2 readback remains OPEN/draft at the revision above, with CI, Security and
+Database Migration Check successful. This documentation/index continuation is
+kept local; a PR comment records the result without triggering new push CI.
+
 ## 2026-10-18 dependency security candidate
 
 Baseline: `ace1785` plus this security change. Scope: root npm application on

@@ -17,6 +17,17 @@ it.skipIf(!process.env.UNIFIED_UI_TEST_URL)(
     const material = await createApplicationSession({
       profileId: "33333333-3333-4333-8333-333333333301" });
     const base = process.env.UNIFIED_UI_TEST_URL!;
+    const customer = await prisma.customers.create({ data: {
+      organization_id: "11111111-1111-4111-8111-111111111111",
+      display_name: "Synthetic security UI customer",
+    }, select: { id: true } });
+    const override = await prisma.organization_feature_overrides.create({ data: {
+      organization_id: "11111111-1111-4111-8111-111111111111",
+      feature_key: "CUSTOMER_BLACKLIST", override_type: "DENY",
+      reason: "Synthetic UI blacklist entitlement regression",
+      created_by: "33333333-3333-4333-8333-333333333301",
+    } });
+    const { getBookingEligibility } = await import("../src/modules/crm/server/customer-status");
     const browser = await chromium.launch({ executablePath:
       "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
       headless: true, args: ["--no-sandbox"] });
@@ -51,9 +62,6 @@ it.skipIf(!process.env.UNIFIED_UI_TEST_URL)(
       await page.getByRole("button", { name: "Save timing policy" }).click();
       expect((await saved).status()).toBe(200);
       await page.getByText(/Published version/).waitFor();
-      const customer = await prisma.customers.findFirstOrThrow({ where: {
-        organization_id:"11111111-1111-4111-8111-111111111111" },
-        select:{ id:true } });
       await page.getByRole("button",{name:"會員結帳",exact:true}).click();
       await page.getByLabel("Customer ID").fill(customer.id);
       const consent = page.waitForResponse(response =>
@@ -61,6 +69,34 @@ it.skipIf(!process.env.UNIFIED_UI_TEST_URL)(
       await page.getByRole("button",{ name:"Review marketing consent" }).click();
       expect((await consent).status()).toBe(200);
       await page.getByLabel("Marketing consent history").waitFor();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByLabel(/^Status/).selectOption("BLACKLIST");
+      await page.getByLabel("Reason", { exact: true }).fill("Synthetic security UI test");
+      const changeStatus = async (button: string, expected: number) => {
+        const pending = page.waitForResponse(response =>
+          response.url().includes("/api/merchant/customers/status") && response.request().method() === "PATCH");
+        await page.getByRole("button", { name: button, exact: true }).click();
+        expect((await pending).status()).toBe(expected);
+      };
+      await changeStatus("Enable status", 403);
+      await page.getByRole("status").filter({ hasText: "目前方案未包含此功能" }).waitFor();
+      const eligible = () => getBookingEligibility("11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222221", customer.id);
+      expect((await eligible()).allowed).toBe(true);
+      expect(await prisma.audit_logs.count({ where: { target_id: customer.id,
+        action: "CUSTOMER_STATUS_CHANGED" } })).toBe(0);
+      await prisma.organization_feature_overrides.update({ where: { id: override.id }, data: { override_type: "ALLOW" } });
+      await changeStatus("Enable status", 200);
+      await page.getByRole("status").filter({ hasText: "Customer status saved" }).waitFor();
+      expect((await eligible()).allowed).toBe(false);
+      await changeStatus("Clear status", 200);
+      expect((await eligible()).allowed).toBe(true);
+      await prisma.organization_feature_overrides.update({ where: { id: override.id }, data: { override_type: "DENY" } });
+      await page.getByLabel(/^Status/).selectOption("VIP");
+      await changeStatus("Enable status", 200);
+      expect(await eligible()).toEqual({ allowed: true, vip: true });
+      await changeStatus("Clear status", 200);
+      expect(await eligible()).toEqual({ allowed: true, vip: false });
       const policies = page.waitForResponse(response =>
         response.url().includes("/api/merchant/benefits") &&
         response.url().includes("policies=true"));
@@ -84,5 +120,8 @@ it.skipIf(!process.env.UNIFIED_UI_TEST_URL)(
         }).map(element => element.outerHTML.slice(0,120)));
       expect(unlabeled).toEqual([]);
       await context.close();
-    } finally { await browser.close(); }
+    } finally {
+      await browser.close();
+      await prisma.organization_feature_overrides.delete({ where: { id: override.id } });
+    }
   }, 60_000);

@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { assertCapability,requireLocation,type OrganizationContext } from "../authorization/context";
 import { prisma } from "../database/prisma";
+import { requireModule } from "../entitlements/module-visibility";
 import { AppError } from "../http/errors";
 
 export type MarketingConsentReview = { customerId:string; currentlyGranted:boolean;
@@ -13,6 +14,7 @@ export async function getMarketingConsentReview(context: OrganizationContext,
   customerId:string): Promise<MarketingConsentReview> {
   assertCapability(context,"customer.read");
   const location=requireLocation(context);
+  await requireModule(context,"CUSTOMER_CRM");
   const customer=await prisma.customers.findFirst({ where:{ id:customerId,
     organization_id:context.organization.id },select:{ id:true } });
   if (!customer) throw new AppError("NOT_FOUND","Customer not found",404);

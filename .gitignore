@@ -16,3 +16,7 @@ artifacts/import-reports
 *.tsbuildinfo
 
 .vercel
+
+# AOCI agent host integration (machine-bound; do not commit)
+.codex/config.toml
+.codex/config.toml.backup.*

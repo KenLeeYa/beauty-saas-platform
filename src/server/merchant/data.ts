@@ -9,6 +9,7 @@ import { prisma } from "../database/prisma";
 import { getEntitlement } from "../entitlements/service";
 import { canShowModule } from "../entitlements/module-visibility";
 import { requireLocation } from "../authorization/context";
+import { AppError } from "../http/errors";
 import { publicMediaUrl } from "../storage/provider";
 import {
   addLocalDays,
@@ -237,6 +238,11 @@ export async function getMerchantWorkspaceData(
   context: OrganizationContext,
 ): Promise<MerchantWorkspaceData> {
   const location = requireLocation(context);
+  const ownBookingsOnly = hasCapability(context.roles, "booking.own.read") &&
+    !hasCapability(context.roles, "booking.read");
+  if (ownBookingsOnly && !context.linkedStaffProfileId) {
+    throw new AppError("FORBIDDEN", "此帳號尚未連結服務人員資料。", 403);
+  }
   const now = new Date();
   const localToday = formatDateInTimeZone(now, location.timezone);
   const rangeStartDate = addLocalDays(localToday, -35);
@@ -375,9 +381,7 @@ export async function getMerchantWorkspaceData(
                   gte: rangeStart,
                   lt: rangeEnd,
                 },
-                ...(hasCapability(context.roles, "booking.own.read") &&
-                !hasCapability(context.roles, "booking.read") &&
-                context.linkedStaffProfileId
+                ...(ownBookingsOnly
                   ? {
                       assigned_staff_id:
                         context.linkedStaffProfileId,
@@ -416,6 +420,10 @@ export async function getMerchantWorkspaceData(
               },
             },
             booking_segments: {
+              ...(ownBookingsOnly ? { where: {
+                assigned_staff_id: context.linkedStaffProfileId,
+                starts_at: { gte: rangeStart, lt: rangeEnd },
+              } } : {}),
               orderBy: {
                 sort_order: "asc",
               },

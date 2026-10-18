@@ -1,5 +1,6 @@
 import { loadEnvConfig } from "@next/env";
 import { expect, it } from "vitest";
+import { NextRequest } from "next/server";
 
 import type { OrganizationContext } from "../src/server/authorization/context";
 
@@ -8,11 +9,15 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)(
   async () => {
     loadEnvConfig(process.cwd());
     const [{ prisma }, { getBookingEligibility, setCustomerStatus },
-      { getMarketingConsentReview },
+      { getMarketingConsentReview }, { createApplicationSession }, { PATCH },
+      { getMerchantWorkspaceData },
       { randomToken }] = await Promise.all([
       import("../src/server/database/prisma"),
       import("../src/modules/crm/server/customer-status"),
       import("../src/server/merchant/marketing-consent"),
+      import("../src/server/auth/session"),
+      import("../src/app/api/merchant/customers/status/route"),
+      import("../src/server/merchant/data"),
       import("../src/server/security/crypto"),
     ]);
     const organizationId = "11111111-1111-4111-8111-111111111111";
@@ -34,6 +39,48 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)(
     const command = { context, customerId: customer.id, scope: "LOCATION" as const,
       statusKind: "BLACKLIST" as const, reason: "synthetic policy review",
       requestId: randomToken(12) };
+    await expect(getMerchantWorkspaceData({ ...context,
+      roles: new Set(["SERVICE_PROVIDER"]), linkedStaffProfileId: null }))
+      .rejects.toMatchObject({ code: "FORBIDDEN", status: 403 });
+    const ownerData = await getMerchantWorkspaceData(context);
+    const staffId = "44444444-4444-4444-8444-444444444401";
+    const staffData = await getMerchantWorkspaceData({ ...context,
+      roles: new Set(["SERVICE_PROVIDER"]), linkedStaffProfileId: staffId });
+    expect(ownerData.bookings.length).toBeGreaterThan(0);
+    expect(staffData.bookings.length).toBeGreaterThan(0);
+    for (const booking of staffData.bookings) {
+      expect(await prisma.booking_segments.count({ where: { booking_id: booking.id,
+        assigned_staff_id: staffId, organization_id: organizationId, location_id: locationId,
+        starts_at: new Date(booking.startsAt), service_name_snapshot: booking.serviceName } })).toBeGreaterThan(0);
+    }
+    const override = await prisma.organization_feature_overrides.create({ data: {
+      organization_id: organizationId, feature_key: "CUSTOMER_BLACKLIST",
+      override_type: "DENY", reason: "Synthetic blacklist security regression",
+      created_by: context.session.profileId,
+    } });
+    try {
+    const session = await createApplicationSession({ profileId: context.session.profileId });
+    const query = new URLSearchParams({ organization: organization.slug, location: location.slug });
+    const patch = (scope: "LOCATION" | "ORGANIZATION", enabled: boolean) => PATCH(new NextRequest(
+      `http://127.0.0.1:3100/api/merchant/customers/status?${query}`, {
+        method: "PATCH", headers: { origin: "http://127.0.0.1:3100",
+          cookie: `beauty_session=${session.sessionToken}; beauty_csrf=${session.csrfToken}`,
+          "x-csrf-token": session.csrfToken, "content-type": "application/json" },
+        body: JSON.stringify({ customerId: customer.id, scope, enabled,
+          statusKind: "BLACKLIST", reason: "Synthetic paid access" }),
+      }));
+    for (const scope of ["LOCATION", "ORGANIZATION"] as const) {
+      const denied = await patch(scope, true);
+      expect(denied.status).toBe(403);
+      expect((await denied.json()).error.code).toBe("FEATURE_UNAVAILABLE");
+    }
+    expect(await prisma.$queryRaw`select id from public.customer_status_events where customer_id=${customer.id}::uuid`).toEqual([]);
+    expect(await prisma.audit_logs.count({ where: { target_id: customer.id,
+      action: "CUSTOMER_STATUS_CHANGED" } })).toBe(0);
+    await prisma.organization_feature_overrides.update({ where: { id: override.id }, data: { override_type: "ALLOW" } });
+    expect((await patch("LOCATION", true)).status).toBe(200);
+    expect((await getBookingEligibility(organizationId, locationId, customer.id)).allowed).toBe(false);
+    expect((await patch("LOCATION", false)).status).toBe(200);
     expect(await getBookingEligibility(organizationId, locationId, customer.id))
       .toEqual({ allowed: true, vip: false });
     await expect(setCustomerStatus({ ...command,
@@ -71,5 +118,8 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)(
     const review=await getMarketingConsentReview(context,customer.id);
     expect(review.currentlyGranted).toBe(false);
     expect(review.history.map(row => row.status)).toEqual(["REVOKED","GRANTED"]);
+    } finally {
+      await prisma.organization_feature_overrides.delete({ where: { id: override.id } });
+    }
   }, 60_000,
 );

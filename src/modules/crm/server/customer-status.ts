@@ -4,6 +4,8 @@ import { Prisma } from "@prisma/client";
 
 import { assertCapability, requireLocation, type OrganizationContext } from "../../../server/authorization/context";
 import { prisma } from "../../../server/database/prisma";
+import { requireModule } from "../../../server/entitlements/module-visibility";
+import { requireEntitlement } from "../../../server/entitlements/service";
 import { AppError } from "../../../server/http/errors";
 
 type QueryClient = Pick<Prisma.TransactionClient, "$queryRaw">;
@@ -48,6 +50,10 @@ export async function setCustomerStatus(input: { context: OrganizationContext;
   assertCapability(input.context, input.scope === "ORGANIZATION" ?
     "organization.manage" : "customer.manage");
   const locationId = input.scope === "LOCATION" ? requireLocation(input.context).id : null;
+  await requireModule(input.context, "CUSTOMER_CRM");
+  if (input.statusKind === "BLACKLIST") {
+    await requireEntitlement(input.context.organization.id, "CUSTOMER_BLACKLIST");
+  }
   const reason = input.reason.trim();
   const effectiveFrom = input.effectiveFrom ?? new Date();
   if (!reason || reason.length > 500 ||

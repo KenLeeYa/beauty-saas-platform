@@ -7,10 +7,13 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)(
   'returns 403 for CRM mutation when the store module is disabled',
   async()=>{
     loadEnvConfig(process.cwd());
-    const [{prisma},{createApplicationSession},{POST:createCustomer}]=await Promise.all([
+    const [{prisma},{createApplicationSession},{POST:createCustomer},
+      {PATCH:setStatus},{GET:readConsent}]=await Promise.all([
       import('../src/server/database/prisma'),
       import('../src/server/auth/session'),
       import('../src/app/api/merchant/customers/route'),
+      import('../src/app/api/merchant/customers/status/route'),
+      import('../src/app/api/merchant/customers/marketing-consent/route'),
     ]);
     const organizationId='11111111-1111-4111-8111-111111111111';
     const locationId='22222222-2222-4222-8222-222222222221';
@@ -32,6 +35,21 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)(
           'x-csrf-token':session.csrfToken,'content-type':'application/json'},body:'{}',
       }));
       expect(response.status).toBe(403);
+      const customer=await prisma.customers.findFirstOrThrow({where:{organization_id:organizationId}});
+      const headers={origin:'http://127.0.0.1:3100',
+        cookie:`beauty_session=${session.sessionToken}; beauty_csrf=${session.csrfToken}`,
+        'x-csrf-token':session.csrfToken,'content-type':'application/json'};
+      const requestId=crypto.randomUUID();
+      const status=await setStatus(new NextRequest(`http://127.0.0.1:3100/api/merchant/customers/status?${query}`,{
+        method:'PATCH',headers:{...headers,'x-request-id':requestId},body:JSON.stringify({
+          customerId:customer.id,scope:'LOCATION',statusKind:'VIP',enabled:true,reason:'Synthetic disabled CRM',
+        }),
+      }));
+      expect(status.status).toBe(403);
+      expect(await prisma.audit_logs.count({where:{request_id:requestId}})).toBe(0);
+      const consent=await readConsent(new NextRequest(
+        `http://127.0.0.1:3100/api/merchant/customers/marketing-consent?${query}&customerId=${customer.id}`,{headers}));
+      expect(consent.status).toBe(403);
     } finally {
       await prisma.$executeRaw(Prisma.sql`
         delete from public.store_module_activations
