@@ -83,6 +83,19 @@ fast-glob consumers; future Next upgrades must rerun these compatibility tests.
 - AOCI delivery loaded all 353 formal entries, but attestation field validation
   and preexisting index drift remain unresolved. No alignment claim is made.
 
+## Separate database baseline finding
+
+The first current-head GitHub migration run passed fresh migrations but failed
+the existing FORCE RLS assertion: 36 later tables enabled RLS without forcing
+it. The dependency security and main CI jobs both passed on `3aab3ea`.
+
+An additive migration restores FORCE RLS only on existing public tables already
+using RLS. It does not change policies, grants, ownership or data. The original
+baseline assertion is preserved. A rollback-only pgTAP regression exercises
+actual non-superuser ownership of OAuth, wallet and payroll tables and verifies
+the trusted service role retains its explicit BYPASSRLS behavior. Current-head
+verification results belong on PR #2; this is not a Production migration.
+
 ## Sources
 
 - https://github.com/advisories/GHSA-vfj7-8cjw-p6xm

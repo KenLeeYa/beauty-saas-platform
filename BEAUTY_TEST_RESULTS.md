@@ -20,13 +20,16 @@ deployment are held by the user's subsequent instruction.
 | Dialog UI after CSS dependency removal | Passed | Actual Dialog component plus newly built CSS at 360/390/1280px: open/close, Escape, focus return, animation selector, no overflow/page errors; `.dev-logs/dependency-dialog-*.png` |
 | Secret scan of unpublished history | Passed | Gitleaks scanned 33 commits from `origin/main..HEAD`, no leaks found |
 | DB integration and complete role browser flows | Blocked, not rerun | Shared Docker maintenance; Beauty container stopped and no listener on 3100; no containers/volumes deleted |
-| GitHub CI | See PR #2 | Current remote check results are recorded on the PR, not inferred from the August checks |
+| GitHub CI / security on `3aab3ea` | Passed | CI run 39084633168 and Security run 39084634291 |
+| Fresh Supabase database on `3aab3ea` | Failed, repair added | Run 39084633165 applied migrations, then failed 1/24 assertions: 36 tables lacked FORCE RLS. Additive migration and actual owner-role regression added; see current PR checks for rerun |
 | Production deployment / live verification | Not performed | User requested retaining the PR without merge/deployment |
 
 See `docs/operations/dependency-security-2026-10-18.md` for alternatives, exact
 dependency boundaries and replacement rationale. AOCI delivery completed all
 10 chunks / 353 entries, but attestation schema validation and preexisting
-index drift remain unresolved; complete index alignment is not claimed.
+index drift remain unresolved; complete index alignment is not claimed. A later
+compaction reload hit Host truncation at chunk 1/10; complete current cognition
+is unavailable until a smaller chunk setting and a new full delivery succeed.
 
 ## 2026-10-09 local continuation (historical)
 
