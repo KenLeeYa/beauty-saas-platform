@@ -13,7 +13,7 @@ it.skipIf(!process.env.UNIFIED_UI_TEST_URL)("enters all synthetic roles and clea
       page.on("pageerror",error=>errors.push(error.message));
       await page.goto(`${base}/api/line-booking/integrated-demo?role=${role}`);
       if (role === "owner") {
-        await browserExpect(page.getByRole("heading",{name:"Operations review"})).toBeVisible();
+        await browserExpect(page.getByRole("heading",{name:"營運管理"})).toBeVisible();
         for (const width of [360,390,430,768,1280]) {
           await page.setViewportSize({width,height:844});
           expect(await page.locator("html").evaluate(element=>element.scrollWidth<=innerWidth)).toBe(true);

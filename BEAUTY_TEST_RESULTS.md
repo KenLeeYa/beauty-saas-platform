@@ -1,5 +1,68 @@
 # Test evidence
 
+## 2026-10-18 keyboard-safe focused reassignment (PR #2 candidate)
+
+Baseline: `13446ab74dac498d5e78edd509a34cef2b18316a` plus the preceding
+focused-dialog increment and this keyboard fix. Delivery is limited to PR #2;
+no merge, deployment, schema change or external provider mutation is authorized.
+
+The dialog now follows VisualViewport height, width and offsets, with a window
+size fallback. It binds listeners after the Radix portal actually mounts and
+cleans them up on close. After resize/focus it scrolls only the dialog body to
+reveal the active field. Geometry transitions are disabled only on this dialog:
+the inherited 100ms transition otherwise made the scroll calculation use an
+intermediate height. Shared dialog behavior is unchanged.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Reproduction | Failed before fix | VisualViewport-only resize left the footer below the keyboard; the first implementation also missed delayed portal mounting and then read transitioning geometry |
+| Keyboard regression | Passed | Layout viewport stays 320x640 / 390x844 while synthetic VisualViewport shrinks to 320-420px and pans 0-96px; active textarea/select and confirm are within bounds, unclipped and hit-testable |
+| Lifecycle and recovery | Passed | Keyboard expand/collapse, focused field switch, close/reopen with already-reduced viewport, localized real 409 with retained draft, retry PATCH 200 and remaining-item refresh |
+| Responsive regression | Passed | 320x640, 390x844, 390x420, 768x900 and 1440x900; no horizontal overflow; confirm stays in bounds |
+| Root gates | Passed | Lint 0 errors / 1 preexisting login-navigation warning; typecheck; final production-mode local build; 104 unit passes, 29 integration-gated skips |
+| Database regression | Passed | 26 tests / 24 files; exact primary/secondary participant, service/resource, financial snapshot, tenant/branch and version preservation |
+| Browser regression | Passed | 5 tests / 4 files, final run 18:10 local time; customer, four roles/LAN, operations and both reassignment cases |
+| LAN inspection | Passed locally | Host browser via 192.168.1.104:3100; synthetic keyboard geometry, Chinese manual fixture, cancel without submission |
+| Release guard | Checked before push | PR #2 OPEN at baseline; Vercel project has no Git link, GitHub deployment list/hooks empty and inspected workflows perform checks only; no provider configuration changed |
+| Physical device | Not run | VisualViewport is simulated in real Edge, not an actual iOS/Android keyboard or native selection sheet; physical-device acceptance remains separate |
+
+Evidence screenshots are ignored local artifacts:
+`.dev-logs/reassignment-keyboard-<height>-<offset>.png` and
+`.dev-logs/keyboard-final-lan-390.png`. The area outside the simulated visual
+viewport is still captured; it is not a rendered OS keyboard.
+The existing local server and manual fixtures remain available for phone testing.
+
+## 2026-10-18 focused mobile reassignment (local only)
+
+Baseline: `13446ab74dac498d5e78edd509a34cef2b18316a` plus this uncommitted
+local increment. No commit, push, merge, deployment or provider write.
+The existing isolated `beauty_msi_20261009` database was preserved.
+
+Selecting a review item opens the existing Radix dialog: full viewport on
+phones and a centered two-column layout on desktop. Replacement and reason
+are adjacent to retained arrangements; actions remain outside the scrollable
+body. Cancel/Escape returns focus without writing. Failed commands retain input;
+successful commands close the dialog before refreshing the versioned worklist.
+Shared page heading, branch display, reassignment/manual controls and domain
+errors are Traditional Chinese. Other operations modules are outside this
+localization scope; this is not a platform-wide translation claim.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Root gates | Passed | Lint 0 errors / 1 preexisting login-navigation warning; npm typecheck; isolated production-mode build; 104 unit passes, 29 environment-gated skips |
+| Database regression | Passed | 26 tests / 24 files; primary/secondary multi-service preservation, qualification, capacity, tenant/branch and stale-version cases |
+| Browser regression | Passed | 5 tests / 4 files, final run 16:55 local time; customer flow, four roles, operations, single and bundled reassignment |
+| Focused dialog | Passed | Cancel preserves DB snapshot and returns focus; reopening clears draft; Escape closes; real off-shift 409 retains target/reason and localized error; retry persists and refreshes remaining work |
+| Responsive geometry | Passed | 320x640, 390x844, 390x420, 768x900, 1440x900; no horizontal overflow and complete confirm button within viewport; short-height case simulates reduced space, not a physical phone keyboard |
+| Harness corrections | Resolved | Initial geometry assertion ran during opening animation; wait for animation completion. Initial remaining-item assertion ran during refresh; wait for the actual remaining item. Neither correction weakens layout or data assertions |
+| LAN manual entry | Passed locally | 192.168.1.104:3100 owner shortcut, focused dialog and cancel; four manual review items remain for October 19/20; no manual test booking submitted |
+| Preserved user fixtures | Passed | Two synthetic bookings with two services/two providers each remain available. Automated bundle fixtures are cancelled and released separately |
+| Release/provider/device | Not performed | No remote changes, real OAuth, notifications, payment or physical-phone testing |
+
+Screenshots: ignored `.dev-logs/bundle-reassignment-<width>-<height>.png`
+and viewport-only `.dev-logs/focused-reassignment-final-390.png`.
+The server remains running on 0.0.0.0:3100 at the user's request.
+
 ## 2026-10-18 multi-service and multi-provider reassignment
 
 Baseline: `dcbd7913b766f5ea3ecd7c5d4436b901406138f5` plus this increment.

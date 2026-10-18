@@ -41,7 +41,7 @@ it.skipIf(!process.env.UNIFIED_UI_TEST_URL)(
       const url = `${base}/merchant/operations?organization=${organization.slug}&location=${location.slug}`;
       const response = await page.goto(url);
       expect(response?.status()).toBe(200);
-      await page.getByRole("heading", { name: "Operations review" }).waitFor();
+      await page.getByRole("heading", { name: "營運管理" }).waitFor();
       expect(await page.locator("main > section:not([hidden])").count()).toBe(1);
       for (const [tab,heading] of [["出勤紀錄","Attendance"],["薪資試算","Payroll shadow calculation"],
         ["會員結帳","Benefits and commission preview"],["多人抽成","Multi-provider commission"]]) {

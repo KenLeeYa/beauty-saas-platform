@@ -25,8 +25,8 @@ function csrfToken() {
   return cookie ? decodeURIComponent(cookie.split("=").slice(1).join("=")) : "";
 }
 
-export function OperationsReview({ organization, location }: {
-  organization: string; location: string }) {
+export function OperationsReview({ organization, location, locationName }: {
+  organization: string; location: string; locationName: string }) {
   const query = new URLSearchParams({ organization, location }).toString();
   const [data, setData] = useState<ReviewData | null>(null);
   const [workspaceView, setWorkspaceView] = useState("timing");
@@ -92,7 +92,7 @@ export function OperationsReview({ organization, location }: {
       .then(async response => {
         const result = await response.json() as Envelope<ReviewData>;
         if (active) setData(result.data ?? null);
-      }).catch(() => { if (active) setMessage("Unable to load review data"); });
+      }).catch(() => { if (active) setMessage("無法載入營運資料，請重新整理後再試"); });
     return () => { active = false; };
   }, [query]);
   async function refresh() {
@@ -163,10 +163,10 @@ export function OperationsReview({ organization, location }: {
     const response = await fetch(`/api/merchant/bookings/reassign?${query}&staffId=${sourceStaffId}`);
     const result = await response.json() as Envelope<{ bookings: typeof futureBookings }>;
     setFutureBookings(result.data?.bookings ?? []);
-    if (!response.ok) setMessage(result.error?.message || "Cannot load future bookings");
+    if (!response.ok) setMessage(result.error?.message || "無法載入未來預約");
   }
   async function reassign(bookingId: string) {
-    const reason = prompt("Reason for reassignment");
+    const reason = prompt("請填寫改派原因");
     if (!reason || !targetStaffId || busy) return;
     setBusy(true); setMessage("");
     try {
@@ -176,9 +176,9 @@ export function OperationsReview({ organization, location }: {
         body: JSON.stringify({ bookingId, targetStaffId, reason }),
       });
       const result = await response.json() as Envelope<unknown>;
-      if (!response.ok) throw Error(result.error?.message || "Reassignment failed");
-      setMessage("Booking reassigned"); await loadFutureBookings();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Reassignment failed"); }
+      if (!response.ok) throw Error(result.error?.message || "改派失敗，請稍後再試");
+      setMessage("已確認改派"); await loadFutureBookings();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "改派失敗，請稍後再試"); }
     finally { setBusy(false); }
   }
   async function changeCustomerStatus(enabled: boolean) {
@@ -256,9 +256,9 @@ export function OperationsReview({ organization, location }: {
   }
   const name = (profileId: string) => data?.employees.find(row => row.id === profileId)?.name ?? profileId;
   return <main className={styles.workspace} style={{ maxWidth: 1080, margin: "2rem auto", padding: "1rem", fontFamily: "sans-serif" }}>
-    <a href={`/merchant/dashboard?${query}`}>← Merchant dashboard</a>
-    <h1>Operations review</h1>
-    <p>Location: {location}. Attendance corrections and payroll approvals preserve their source history.</p>
+    <a href={`/merchant/dashboard?${query}`}>← 返回商家後台</a>
+    <h1>營運管理</h1>
+    <p>分店：{locationName}</p>
     {message && <p role="status">{message}</p>}
     <nav aria-label="營運工作區" style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginBottom:16}}>
       {[{id:"timing",label:"現場排程",icon:CalendarClock},{id:"benefits",label:"會員結帳",icon:Gift},
@@ -290,25 +290,25 @@ export function OperationsReview({ organization, location }: {
             }}>Approve overtime</button>}</td>
         </tr>)}</tbody></table>
     </section>
-    <section hidden={workspaceView !== "reassignment"} aria-label="Future booking reassignment">
-      <h2>Future booking reassignment</h2>
+    <section hidden={workspaceView !== "reassignment"} aria-label="預約改派">
+      <h2>預約改派</h2>
       {workspaceView === "reassignment" && <QualificationReview key={query} query={query} staff={data?.staff ?? []} />}
       <details><summary>手動檢視其他預約</summary>
-      <label>Current beautician <select value={sourceStaffId}
-        onChange={event => setSourceStaffId(event.target.value)}><option value="">Select</option>
+      <label>原美容師 <select value={sourceStaffId}
+        onChange={event => setSourceStaffId(event.target.value)}><option value="">請選擇</option>
         {data?.staff.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}
       </select></label>
       <button disabled={!sourceStaffId} onClick={() => void loadFutureBookings()}>
-        Review assignments</button>
-      <label>New beautician <select value={targetStaffId}
-        onChange={event => setTargetStaffId(event.target.value)}><option value="">Select</option>
+        查詢預約安排</button>
+      <label>新美容師 <select value={targetStaffId}
+        onChange={event => setTargetStaffId(event.target.value)}><option value="">請選擇</option>
         {data?.staff.filter(row => row.id !== sourceStaffId).map(row =>
           <option key={row.id} value={row.id}>{row.name}</option>)}
       </select></label>
       <ul>{futureBookings.map(booking => <li key={booking.id}>
         {new Date(booking.startsAt).toLocaleString()} · {booking.serviceName} · {booking.staffName}
         <button disabled={busy || !targetStaffId} onClick={() => void reassign(booking.id)}>
-          Reassign</button></li>)}</ul>
+          確認改派</button></li>)}</ul>
       </details>
     </section>
     <section hidden={workspaceView !== "payroll"} aria-label="Payroll review">

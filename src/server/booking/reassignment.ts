@@ -34,11 +34,11 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
   assertCapability(input.context, "booking.manage");
   const location = requireLocation(input.context);
   const reason = input.reason.trim();
-  if (!reason || reason.length > 500) throw new AppError("BAD_REQUEST", "Reason required", 400);
+  if (!reason || reason.length > 500) throw new AppError("BAD_REQUEST", "請填寫 500 字以內的改派原因", 400);
   const precise = input.segmentId !== undefined || input.allocationId !== undefined;
   if (precise && (!input.segmentId || !input.allocationId || !Number.isInteger(input.expectedVersion) ||
       input.expectedVersion! < 1)) {
-    throw new AppError("BAD_REQUEST", "Segment, allocation and version are required together", 400);
+    throw new AppError("BAD_REQUEST", "請重新選取完整的服務、人員安排與預約版本", 400);
   }
   await prisma.$transaction(async transaction => {
     const locked = await transaction.$queryRaw<{ id: string }[]>(Prisma.sql`
@@ -48,7 +48,7 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
         and location_id = ${location.id}::uuid
       for update
     `);
-    if (!locked[0]) throw new AppError("NOT_FOUND", "Booking not found", 404);
+    if (!locked[0]) throw new AppError("NOT_FOUND", "找不到此預約", 404);
     const booking = await transaction.bookings.findUniqueOrThrow({ where: { id: input.bookingId },
       select: { status: true, version: true, customer_id: true, service_started_at: true,
         booking_segments: { where: { organization_id: input.context.organization.id, location_id: location.id }, orderBy: { sort_order: "asc" }, select: {
@@ -62,26 +62,26 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
         } } } });
     const segment = precise ? booking.booking_segments.find(row => row.id === input.segmentId) : booking.booking_segments[0];
     if (input.expectedVersion !== undefined && booking.version !== input.expectedVersion) {
-      throw new AppError("CONFLICT", "Booking changed; refresh before reassignment", 409);
+      throw new AppError("CONFLICT", "預約已更新，請返回清單並重新整理後再改派", 409);
     }
     const old = precise ? booking.booking_staff_allocations.find(row => row.id === input.allocationId) : booking.booking_staff_allocations[0];
     if (!["CONFIRMED", "PENDING_PAYMENT"].includes(booking.status) || booking.service_started_at ||
         (!precise && (booking.booking_segments.length !== 1 || booking.booking_staff_allocations.length !== 1)) ||
         !segment || !old || old.booking_segment_id !== segment.id ||
         segment.starts_at <= new Date() || !segment.service_variant_id) {
-      throw new AppError("CONFLICT", "Booking cannot be reassigned", 409);
+      throw new AppError("CONFLICT", "此預約目前無法改派，請返回清單確認預約狀態與人員安排", 409);
     }
     if (old.staff_profile_id === input.targetStaffId) return;
     if (segment.assigned_staff_id === input.targetStaffId || booking.booking_staff_allocations.some(row =>
       row.booking_segment_id === segment.id && row.staff_profile_id === input.targetStaffId)) {
-      throw new AppError("CONFLICT", "Target already participates in this service", 409);
+      throw new AppError("CONFLICT", "此美容師已參與同一服務，請選擇其他人員", 409);
     }
     const target = await transaction.staff_profiles.findFirst({ where: {
       id: input.targetStaffId, organization_id: input.context.organization.id,
       is_active: true, staff_location_assignments: { some: {
         location_id: location.id, is_active: true } },
     }, select: { id: true, display_name: true } });
-    if (!target) throw new AppError("NOT_FOUND", "Target staff unavailable", 404);
+    if (!target) throw new AppError("NOT_FOUND", "找不到可改派的美容師，請重新選擇", 404);
     const day = formatDateInTimeZone(segment.starts_at, location.timezone);
     const starts = localClock(segment.starts_at, location.timezone);
     const ends = localClock(segment.ends_at, location.timezone);
@@ -100,7 +100,7 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
         and (assignment.effective_until is null or assignment.effective_until > ${segment.starts_at})
       for share of assignment
     `);
-    if (!qualified[0]) throw new AppError("CONFLICT", "Target is not qualified", 409);
+    if (!qualified[0]) throw new AppError("CONFLICT", "此美容師的資格未涵蓋預約時間，請選擇其他人員", 409);
     const schedule = await transaction.$queryRaw<{ allowed: boolean }[]>(Prisma.sql`
       select (
         exists (select 1 from public.staff_schedule_exceptions exception
@@ -139,7 +139,7 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
             and off.starts_at < ${old.ends_at} and off.ends_at > ${old.starts_at})
         as allowed
     `);
-    if (!schedule[0]?.allowed) throw new AppError("CONFLICT", "Target is off shift", 409);
+    if (!schedule[0]?.allowed) throw new AppError("CONFLICT", "此美容師當時未排班或休假，請選擇其他人員", 409);
     const priorDispatch = await transaction.$queryRaw<{ id: string; mode: string }[]>(Prisma.sql`
       select claim.id, claim.mode from public.booking_dispatch_claims claim
       where claim.organization_id = ${input.context.organization.id}::uuid
@@ -152,17 +152,17 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
             and event.event_type = 'REASSIGNED' and event.staff_profile_id = ${old.staff_profile_id}::uuid))
       for update of claim
     `);
-    if (priorDispatch.length > 1) throw new AppError("CONFLICT", "Ambiguous dispatch assignment", 409);
+    if (priorDispatch.length > 1) throw new AppError("CONFLICT", "原派工紀錄不一致，請先確認預約安排", 409);
     if (priorDispatch[0]) {
       if (priorDispatch[0].mode === "IMMEDIATE" &&
           !input.context.roles.has("ORGANIZATION_OWNER")) {
-        throw new AppError("FORBIDDEN", "Immediate rotation override requires owner access", 403);
+        throw new AppError("FORBIDDEN", "現場輪派的改派須由商家負責人確認", 403);
       }
       const changes = await transaction.$queryRaw<{ id: string }[]>(Prisma.sql`
         select id from public.booking_dispatch_events
         where claim_id = ${priorDispatch[0].id}::uuid and event_type = 'REASSIGNED'
       `);
-      if (changes.length) throw new AppError("CONFLICT", "Dispatch booking already reassigned", 409);
+      if (changes.length) throw new AppError("CONFLICT", "此輪派預約已完成一次改派，請先確認派工紀錄", 409);
     }
     // Inserting the new blocking allocation first lets the GiST exclusion reject a busy target.
     const replacement = await transaction.booking_staff_allocations.create({ data: {

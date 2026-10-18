@@ -1,9 +1,43 @@
 import { loadEnvConfig } from "@next/env";
 import { expect, it } from "vitest";
-import { chromium } from "@playwright/test";
+import { chromium, type Locator, type Page } from "@playwright/test";
 
 import type { VerifiedMobileActor } from "../src/server/auth/line-mobile-session";
 import type { OrganizationContext } from "../src/server/authorization/context";
+
+// Model a keyboard that resizes/pans only VisualViewport, not the CSS layout viewport.
+async function keyboardViewport(page: Page, height: number | null, offsetTop = 0) {
+  await page.evaluate(({ height, offsetTop }) => {
+    const viewport = window.visualViewport!;
+    if (height === null) {
+      Reflect.deleteProperty(viewport, "height");
+      Reflect.deleteProperty(viewport, "offsetTop");
+    } else {
+      Object.defineProperties(viewport, {
+        height: { configurable: true, value: height },
+        offsetTop: { configurable: true, value: offsetTop },
+      });
+    }
+    viewport.dispatchEvent(new Event("resize"));
+    viewport.dispatchEvent(new Event("scroll"));
+  }, { height, offsetTop });
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+}
+
+async function expectKeyboardControls(dialog: Locator, fieldName = "改派原因") {
+  for (const control of [dialog.getByLabel(fieldName), dialog.getByRole("button", { name: "確認改派", exact: true })]) {
+    expect(await control.evaluate(element => {
+      const bounds = element.getBoundingClientRect();
+      const viewport = window.visualViewport!;
+      const body = element.closest("form")!.querySelector("textarea")!.closest("label")!.parentElement!.parentElement!;
+      const bodyBounds = body.getBoundingClientRect();
+      const hit = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+      return bounds.top >= viewport.offsetTop && bounds.bottom <= viewport.offsetTop + viewport.height + 1 &&
+        (element.tagName === "BUTTON" || (bounds.top >= bodyBounds.top && bounds.bottom <= bodyBounds.bottom + 1)) &&
+        !!hit && element.contains(hit);
+    }), "focused input and confirm must be visible, unclipped and hit-testable above the keyboard").toBe(true);
+  }
+}
 
 it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)(
   "keeps the booking and old allocation until a qualified replacement succeeds",
@@ -185,13 +219,14 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)(
         const panel = page.getByLabel("資格異動待處理預約", { exact: true });
         const row = panel.locator(`li[data-segment-id="${queued.segmentId}"]`);
         await row.getByRole("button", { name: "選擇改派人員" }).click();
-        await panel.getByLabel("改派美容師").selectOption(targetStaff);
-        await panel.getByLabel("改派原因").fill("Synthetic browser confirmed reassignment");
+        const dialog = page.getByRole("dialog", { name: "改派預約", exact: true });
+        await dialog.getByLabel("改派美容師").selectOption(targetStaff);
+        await dialog.getByLabel("改派原因").fill("Synthetic browser confirmed reassignment");
         expect(await page.locator("html").evaluate(element => element.scrollWidth <= innerWidth)).toBe(true);
         await page.screenshot({ path: ".dev-logs/qualification-review-mobile.png", fullPage: true });
         const saved = page.waitForResponse(response => response.url().includes("/bookings/reassign") &&
           response.request().method() === "PATCH");
-        await panel.getByRole("button", { name: "確認改派", exact: true }).click();
+        await dialog.getByRole("button", { name: "確認改派", exact: true }).click();
         expect((await saved).status()).toBe(200);
         await panel.getByRole("status").filter({ hasText: "已確認改派" }).waitFor();
         await row.waitFor({ state: "detached" });
@@ -353,33 +388,88 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)("reassigns one participant acr
         await page.getByRole("button", { name: "預約改派", exact: true }).click();
         const panel = page.getByLabel("資格異動待處理預約", { exact: true });
         const row = panel.locator(`li[data-allocation-id="${selected.allocationId}"]`);
-        await row.getByRole("button", { name: "選擇改派人員" }).click();
-        await panel.getByLabel("改派美容師").selectOption(replacement.id);
-        await panel.getByLabel("改派原因").fill(command.reason);
-        expect(await panel.getByLabel("保留安排").textContent()).toContain(primary.display_name);
-        expect(await panel.getByLabel("保留安排").textContent()).toContain("Bundle service 2");
-        for (const width of [390, 1440]) {
-          await page.setViewportSize({ width, height: 900 });
-          await panel.getByRole("button", { name: "確認改派", exact: true }).scrollIntoViewIfNeeded();
+        const open = row.getByRole("button", { name: "選擇改派人員" });
+        await open.click();
+        const dialog = page.getByRole("dialog", { name: "改派預約", exact: true });
+        await dialog.getByLabel("改派美容師").selectOption(replacement.id);
+        await dialog.getByLabel("改派原因").fill("取消不可變更資料");
+        await dialog.getByRole("button", { name: "取消", exact: true }).click();
+        await dialog.waitFor({ state: "hidden" });
+        expect(await open.evaluate(element => element === document.activeElement)).toBe(true);
+        expect(await snapshot()).toEqual(before);
+        await open.click();
+        expect(await dialog.getByLabel("改派原因").inputValue()).toBe("");
+        await page.keyboard.press("Escape");
+        await dialog.waitFor({ state: "hidden" });
+        await open.click();
+        await dialog.getByLabel("改派美容師").selectOption(replacement.id);
+        await dialog.getByLabel("改派原因").fill(command.reason);
+        expect(await dialog.getByLabel("保留安排").textContent()).toContain(primary.display_name);
+        expect(await dialog.getByLabel("保留安排").textContent()).toContain("Bundle service 2");
+        for (const [width, height] of [[320, 640], [390, 844], [390, 420], [768, 900], [1440, 900]]) {
+          await page.setViewportSize({ width, height });
           await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+          await dialog.evaluate(async element => {
+            await Promise.all(element.getAnimations().map(animation => animation.finished));
+          });
           expect(await page.locator("html").evaluate(element => element.scrollWidth <= innerWidth)).toBe(true);
-          expect(await panel.getByRole("button", { name: "確認改派", exact: true }).isVisible()).toBe(true);
-          await page.screenshot({ path: `.dev-logs/bundle-reassignment-${width}.png`, fullPage: true });
+          const bounds = await dialog.getByRole("button", { name: "確認改派", exact: true }).boundingBox();
+          expect(bounds).not.toBeNull();
+          expect(bounds!.y).toBeGreaterThanOrEqual(0);
+          expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(height);
+          expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+          await page.screenshot({ path: `.dev-logs/bundle-reassignment-${width}-${height}.png`, fullPage: true });
         }
+        await page.setViewportSize({ width: 320, height: 640 });
+        await dialog.getByLabel("改派原因").focus();
+        await keyboardViewport(page, 320, 48);
+        await expectKeyboardControls(dialog);
+        await dialog.getByLabel("改派美容師").focus();
+        await keyboardViewport(page, 320, 48);
+        await expectKeyboardControls(dialog, "改派美容師");
+        await keyboardViewport(page, null);
+        await page.setViewportSize({ width: 390, height: 844 });
+        await dialog.getByLabel("改派原因").focus();
+        for (const [height, offsetTop] of [[420, 0], [360, 64], [320, 96]]) {
+          await keyboardViewport(page, height, offsetTop);
+          await expectKeyboardControls(dialog);
+          expect(await dialog.getByLabel("改派原因").inputValue()).toBe(command.reason);
+          await page.screenshot({ path: `.dev-logs/reassignment-keyboard-${height}-${offsetTop}.png` });
+        }
+        await keyboardViewport(page, null);
+        await expectKeyboardControls(dialog);
+        await dialog.getByRole("button", { name: "取消", exact: true }).click();
+        await dialog.waitFor({ state: "hidden" });
+        await keyboardViewport(page, 360, 64);
+        await open.click();
+        await dialog.getByLabel("改派美容師").selectOption(replacement.id);
+        await dialog.getByLabel("改派原因").fill(command.reason);
+        await dialog.evaluate(async element => { await Promise.all(element.getAnimations().map(animation => animation.finished)); });
+        await keyboardViewport(page, 360, 64);
+        await expectKeyboardControls(dialog);
         const saved = page.waitForResponse(response => response.url().includes("/bookings/reassign") && response.request().method() === "PATCH");
         const leave = await prisma.staff_time_off.create({ data: { organization_id: organizationId,
           location_id: locationId, staff_profile_id: replacement.id, starts_at: segments[0].starts_at,
           ends_at: segments[0].ends_at, reason: "UI failure and retry" } });
         try {
-          await panel.getByRole("button", { name: "確認改派", exact: true }).click();
+          await dialog.getByRole("button", { name: "確認改派", exact: true }).click();
           expect((await saved).status()).toBe(409);
-          await panel.getByRole("alert").waitFor();
+          await dialog.getByRole("alert").waitFor();
+          expect(await dialog.getByRole("alert").textContent()).toBe("此美容師當時未排班或休假，請選擇其他人員");
+          expect(await dialog.getByLabel("改派原因").inputValue()).toBe(command.reason);
+          expect(await dialog.getByLabel("改派美容師").inputValue()).toBe(replacement.id);
+          await dialog.getByLabel("改派原因").focus();
+          await keyboardViewport(page, 320, 96);
+          await expectKeyboardControls(dialog);
           expect(await snapshot()).toEqual(before);
         } finally { await prisma.staff_time_off.delete({ where: { id: leave.id } }); }
         const retried = page.waitForResponse(response => response.url().includes("/bookings/reassign") && response.request().method() === "PATCH");
-        await panel.getByRole("button", { name: "確認改派", exact: true }).click();
+        await dialog.getByRole("button", { name: "確認改派", exact: true }).click();
         expect((await retried).status()).toBe(200);
+        await dialog.waitFor({ state: "hidden" });
+        await keyboardViewport(page, null);
         await row.waitFor({ state: "detached" });
+        await panel.locator(`li[data-segment-id="${segments[1].id}"]`).waitFor();
         expect(await panel.locator(`li[data-segment-id="${segments[1].id}"]`).count()).toBe(1);
         expect(errors).toEqual([]);
       } finally { await browser.close(); }

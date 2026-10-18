@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-10-08T10:43:30Z",
-  "updated_at": "2026-10-18T08:24:23Z",
+  "updated_at": "2026-10-18T10:12:33Z",
   "files": {
     ".env.example": {
       "role": "index",
@@ -83,9 +83,9 @@
     },
     "BEAUTY_TEST_RESULTS.md": {
       "role": "index",
-      "sha256": "ab09e6bd86ae087b51eb1ccacb58914b0f53aadabd4c49a3b9f4e72d7a47a7e8",
-      "size": 22610,
-      "normalized_sha256": "ab09e6bd86ae087b51eb1ccacb58914b0f53aadabd4c49a3b9f4e72d7a47a7e8"
+      "sha256": "6c4b31bbea4fccedda006f4426bab150e18ed9d35270f3974909ad0e12ab4636",
+      "size": 28379,
+      "normalized_sha256": "6c4b31bbea4fccedda006f4426bab150e18ed9d35270f3974909ad0e12ab4636"
     },
     "README.md": {
       "role": "index",
@@ -95,9 +95,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "6a8e5ee40808cb66aaacd2d6c154dbcb375e02a8bfb6b71af0476e4c62415724",
-      "size": 263634,
-      "normalized_sha256": "6a8e5ee40808cb66aaacd2d6c154dbcb375e02a8bfb6b71af0476e4c62415724"
+      "sha256": "0711ddda65d38c049487cd91f78aad0d7fba2a041660ba90e52ceb3d36db50e7",
+      "size": 263861,
+      "normalized_sha256": "0711ddda65d38c049487cd91f78aad0d7fba2a041660ba90e52ceb3d36db50e7"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -1737,27 +1737,27 @@
     },
     "src/app/merchant/operations/page.tsx": {
       "role": "index",
-      "sha256": "7a54135e1e62ff54c266d1edd600b0c377737d27f94be8fbaf0f29ebcfa8e67d",
-      "size": 979,
-      "normalized_sha256": "7a54135e1e62ff54c266d1edd600b0c377737d27f94be8fbaf0f29ebcfa8e67d"
+      "sha256": "2fd977a982b7e8a65a661e655a031cfd7232d94b155b81b77774539ed597d1f3",
+      "size": 1016,
+      "normalized_sha256": "2fd977a982b7e8a65a661e655a031cfd7232d94b155b81b77774539ed597d1f3"
     },
     "src/app/merchant/operations/qualification-review.tsx": {
       "role": "index",
-      "sha256": "0df1f5af502b90d23d6ff450a4cf9ca34b0bce1332e011d636e684c7504ae21c",
-      "size": 7253,
-      "normalized_sha256": "0df1f5af502b90d23d6ff450a4cf9ca34b0bce1332e011d636e684c7504ae21c"
+      "sha256": "46104fc1e387661d54aca0ee0d0aff0cf5a2d4452d5750fa94b83881c12d9a41",
+      "size": 11412,
+      "normalized_sha256": "46104fc1e387661d54aca0ee0d0aff0cf5a2d4452d5750fa94b83881c12d9a41"
     },
     "src/app/merchant/operations/review.module.css": {
       "role": "index",
-      "sha256": "3f8cf43a64f4ae6066fd3a511a8b03131b9792729a9a3d26004356414493a0c9",
-      "size": 1969,
-      "normalized_sha256": "3f8cf43a64f4ae6066fd3a511a8b03131b9792729a9a3d26004356414493a0c9"
+      "sha256": "58b2ddeb21917488546e752cef087b5d021db977742c23dff45729dff5d10c48",
+      "size": 4259,
+      "normalized_sha256": "58b2ddeb21917488546e752cef087b5d021db977742c23dff45729dff5d10c48"
     },
     "src/app/merchant/operations/review.tsx": {
       "role": "index",
-      "sha256": "5a55b989c69c4bf1fef9d89ab3d1770f1ba4637eace1a5e348a4aeea19c91352",
-      "size": 33318,
-      "normalized_sha256": "5a55b989c69c4bf1fef9d89ab3d1770f1ba4637eace1a5e348a4aeea19c91352"
+      "sha256": "3c0efb0c6d7bcb64c6d4e6751ef46f3d3dbc5720572b3c4ef9d99a17b96e76b1",
+      "size": 33286,
+      "normalized_sha256": "3c0efb0c6d7bcb64c6d4e6751ef46f3d3dbc5720572b3c4ef9d99a17b96e76b1"
     },
     "src/app/merchant/page.tsx": {
       "role": "index",
@@ -2301,9 +2301,9 @@
     },
     "src/server/booking/reassignment.ts": {
       "role": "index",
-      "sha256": "34a4b69b1c064406c0ea2dd568a7259051c0f29e26ba0ce7b42ec8cccf433057",
-      "size": 13893,
-      "normalized_sha256": "34a4b69b1c064406c0ea2dd568a7259051c0f29e26ba0ce7b42ec8cccf433057"
+      "sha256": "99f770963ce94b7962e89b3e985e87246afaa06a7d7f4449c3a97dce9136844c",
+      "size": 14161,
+      "normalized_sha256": "99f770963ce94b7962e89b3e985e87246afaa06a7d7f4449c3a97dce9136844c"
     },
     "src/server/booking/state-machine.test.ts": {
       "role": "index",
@@ -3027,9 +3027,9 @@
     },
     "tests/booking-reassignment.integration.test.ts": {
       "role": "index",
-      "sha256": "d64c4b446b9c041c0cbf2e7b1c611c197e92eb26155d67600ecfb20dbcddf8d1",
-      "size": 32037,
-      "normalized_sha256": "d64c4b446b9c041c0cbf2e7b1c611c197e92eb26155d67600ecfb20dbcddf8d1"
+      "sha256": "1f04b61f268ab80be4965cd9f9892a131a311b98398effe75ed211c01a3dce48",
+      "size": 37486,
+      "normalized_sha256": "1f04b61f268ab80be4965cd9f9892a131a311b98398effe75ed211c01a3dce48"
     },
     "tests/customer-status.integration.test.ts": {
       "role": "index",
@@ -3135,9 +3135,9 @@
     },
     "tests/msi-role-ui.integration.test.ts": {
       "role": "index",
-      "sha256": "83d8be24158fe8dae2696af1c2f8a5d24917279d5cb8e2688283b2211328acf7",
-      "size": 3522,
-      "normalized_sha256": "83d8be24158fe8dae2696af1c2f8a5d24917279d5cb8e2688283b2211328acf7"
+      "sha256": "454465f5577d4476df5af9000ba818e21db71163156a0364fe168f69c6123ae3",
+      "size": 3517,
+      "normalized_sha256": "454465f5577d4476df5af9000ba818e21db71163156a0364fe168f69c6123ae3"
     },
     "tests/operations-access.integration.test.ts": {
       "role": "index",
@@ -3147,9 +3147,9 @@
     },
     "tests/operations-ui.integration.test.ts": {
       "role": "index",
-      "sha256": "a74bda3a0e1483aec046a8d6c7c47a8fee8f7db8c6968c74f5efc819d4988f68",
-      "size": 7628,
-      "normalized_sha256": "a74bda3a0e1483aec046a8d6c7c47a8fee8f7db8c6968c74f5efc819d4988f68"
+      "sha256": "eacaa783f25d4512c9deec0a3980ef91cca0c76f34780a610c2a669491f8a377",
+      "size": 7623,
+      "normalized_sha256": "eacaa783f25d4512c9deec0a3980ef91cca0c76f34780a610c2a669491f8a377"
     },
     "tests/payroll-period.integration.test.ts": {
       "role": "index",

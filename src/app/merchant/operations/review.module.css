@@ -21,3 +21,30 @@
 .workspace table { width:100%; table-layout:fixed; font-size:13px; border-collapse:collapse; margin:12px 0; }
 .workspace td, .workspace th { overflow-wrap:anywhere; padding:8px 4px; border-bottom:1px solid #d8e0e6; text-align:left; }
 .workspace pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:13px; }
+.reassignmentDialog { width:calc(var(--reassignment-width, 100%) - 32px); max-width:720px; max-height:calc(var(--reassignment-height, 100dvh) - 32px); top:calc(var(--reassignment-top, 0px) + var(--reassignment-height, 100dvh) / 2); left:calc(var(--reassignment-left, 0px) + var(--reassignment-width, 100%) / 2); padding:0; gap:0; border-radius:8px; overflow:hidden; font-family:sans-serif; }
+.reassignmentDialog { transition:none; }
+.reassignmentForm { display:flex; flex-direction:column; min-height:0; max-height:inherit; }
+.reassignmentHeader { flex:none; padding:16px 20px 12px; border-bottom:1px solid #d8e0e6; overflow-wrap:anywhere; }
+.reassignmentHeader h2 { font-size:20px; margin:0 0 6px; }
+.reassignmentHeader p { margin:0; }
+.reassignmentBody { min-height:0; overflow:auto; overscroll-behavior:contain; padding:12px 20px; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; }
+.reassignmentFields { min-width:0; }
+.reassignmentFields p { margin:0; overflow-wrap:anywhere; }
+.reassignmentFields label { margin:10px 0; }
+.reassignmentFields :is(select,textarea) { font-size:16px; }
+.reassignmentFields textarea { min-height:68px; resize:vertical; }
+.retainedArrangements { min-width:0; }
+.retainedArrangements h3 { margin:0 0 8px; }
+.retainedArrangements ul { list-style:none; padding:0; margin:0; }
+.retainedArrangements li { display:grid; gap:3px; padding:8px 0; border-bottom:1px solid #e1e7eb; overflow-wrap:anywhere; font-size:13px; }
+.retainedArrangements time { color:#53636f; }
+.reassignmentActions { flex:none; display:grid; grid-template-columns:1fr 2fr; gap:10px; padding:12px 20px max(12px,env(safe-area-inset-bottom)); border-top:1px solid #d8e0e6; background:#fff; }
+.reassignmentActions button { margin:0; }
+.reassignmentError { grid-column:1 / -1; color:#9d2525 !important; }
+@media (max-width:639px) {
+  .reassignmentDialog { width:var(--reassignment-width, 100%); max-width:100%; height:var(--reassignment-height, 100dvh); max-height:var(--reassignment-height, 100dvh); border-radius:0; }
+  .reassignmentForm { height:100%; }
+  .reassignmentHeader { padding:max(12px,env(safe-area-inset-top)) 16px 10px; }
+  .reassignmentBody { flex:1; display:block; padding:12px 16px; }
+  .reassignmentActions { padding-left:16px; padding-right:16px; }
+}

@@ -17,5 +17,5 @@ export default async function OperationsPage({ searchParams }: { searchParams: P
   if (!context.location || (!hasCapability(context.roles, "staff.manage") &&
       !hasCapability(context.roles, "billing.read"))) forbidden();
   return <OperationsReview organization={context.organization.slug}
-    location={context.location.slug} />;
+    location={context.location.slug} locationName={context.location.name} />;
 }
