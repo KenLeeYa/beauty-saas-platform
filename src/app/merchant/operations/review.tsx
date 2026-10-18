@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { requestId } from "@/lib/line-booking/request-id";
 import { Clock, CalendarClock, Wallet, Gift, Shuffle, UsersRound } from "lucide-react";
 import styles from "./review.module.css";
+import { QualificationReview } from "./qualification-review";
 
 type Attendance = { id: string; profileId: string; kind: string;
   occurredAt: string; correctedAt: string | null };
@@ -291,6 +292,8 @@ export function OperationsReview({ organization, location }: {
     </section>
     <section hidden={workspaceView !== "reassignment"} aria-label="Future booking reassignment">
       <h2>Future booking reassignment</h2>
+      {workspaceView === "reassignment" && <QualificationReview key={query} query={query} staff={data?.staff ?? []} />}
+      <details><summary>手動檢視其他預約</summary>
       <label>Current beautician <select value={sourceStaffId}
         onChange={event => setSourceStaffId(event.target.value)}><option value="">Select</option>
         {data?.staff.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}
@@ -306,6 +309,7 @@ export function OperationsReview({ organization, location }: {
         {new Date(booking.startsAt).toLocaleString()} · {booking.serviceName} · {booking.staffName}
         <button disabled={busy || !targetStaffId} onClick={() => void reassign(booking.id)}>
           Reassign</button></li>)}</ul>
+      </details>
     </section>
     <section hidden={workspaceView !== "payroll"} aria-label="Payroll review">
       <h2>Payroll shadow calculation</h2>

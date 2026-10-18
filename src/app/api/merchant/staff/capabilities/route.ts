@@ -29,12 +29,12 @@ export async function PATCH(request: NextRequest): Promise<Response> {
     const context = await resolveMerchantContext({ session,
       organizationSlug: scope.organization, locationSlug: scope.location });
     const input = capabilitySchema.parse(await request.json());
-    await setStaffCapability({ context, assignmentId: input.assignmentId,
+    const result = await setStaffCapability({ context, assignmentId: input.assignmentId,
       effectiveFrom: new Date(input.effectiveFrom),
       effectiveUntil: input.effectiveUntil ? new Date(input.effectiveUntil) : null,
       onlineSelectable: input.onlineSelectable,
       walkInEligible: input.walkInEligible, reason: input.reason });
-    return jsonSuccess({ updated: true }, { headers: { "x-request-id": requestId } });
+    return jsonSuccess({ updated: true, ...result }, { headers: { "x-request-id": requestId } });
   } catch (error) {
     return jsonError(error, requestId);
   }

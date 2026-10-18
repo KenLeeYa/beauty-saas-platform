@@ -7,13 +7,17 @@
 .workspace section { border-top:1px solid #d8e0e6; padding-top:8px; }
 .workspace section[hidden] { display:none; }
 .workspace label { display:block; font-size:14px; margin:12px 0; }
-.workspace input:not([type="checkbox"]), .workspace select { display:block; width:100%; min-height:44px; margin-top:6px; padding:8px 10px; border:1px solid #bdcbd4; border-radius:4px; background:#fff; color:#202a32; }
+.workspace input:not([type="checkbox"]), .workspace select, .workspace textarea { display:block; width:100%; min-height:44px; margin-top:6px; padding:8px 10px; border:1px solid #bdcbd4; border-radius:4px; background:#fff; color:#202a32; }
+.workspace textarea { min-height:88px; resize:vertical; }
+.qualificationReview button { display:inline-flex; align-items:center; justify-content:center; gap:6px; }
+.qualificationReview button[type="submit"] { background:#202a32; color:#fff; }
+.workspace summary { cursor:pointer; padding:12px 0; min-height:44px; }
 .workspace input[type="checkbox"] { width:20px; height:20px; margin:0 8px 0 0; vertical-align:middle; }
 .workspace button { min-height:44px; padding:8px 12px; margin:4px 8px 4px 0; background:#fff; border:1px solid #bdcbd4; border-radius:4px; font-size:14px; }
 .workspace nav button { margin:0; }
 .workspace button:disabled { opacity:.55; cursor:not-allowed; }
 .workspace button:hover:not(:disabled) { border-color:#126e76; }
-.workspace :is(button,input,select,a):focus-visible { outline:2px solid #126e76; outline-offset:2px; }
+.workspace :is(button,input,select,textarea,a):focus-visible { outline:2px solid #126e76; outline-offset:2px; }
 .workspace table { width:100%; table-layout:fixed; font-size:13px; border-collapse:collapse; margin:12px 0; }
 .workspace td, .workspace th { overflow-wrap:anywhere; padding:8px 4px; border-bottom:1px solid #d8e0e6; text-align:left; }
 .workspace pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:13px; }

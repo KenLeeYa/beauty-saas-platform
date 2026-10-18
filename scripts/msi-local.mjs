@@ -48,6 +48,8 @@ const env = { ...process.env, DATABASE_URL: url.toString(), DIRECT_URL: url.toSt
 function run(args) {
   const result = spawnSync(process.execPath, args, { env, encoding: "utf8", timeout: 600000 });
   const redact = text => (text || "").replaceAll(url.toString(), "[local database]")
+    .replace(/(beauty_(?:session|csrf|line_session)=)[^;\s]+/g, "$1[redacted]")
+    .replace(/((?:x-csrf-token|authorization):\s*)[^\r\n]*/gi, "$1[redacted]")
     .replaceAll(values.POSTGRES_PASSWORD, "[redacted]");
   process.stdout.write(redact(result.stdout));
   process.stderr.write(redact(result.stderr));
@@ -78,7 +80,7 @@ try {
     env.UNIFIED_UI_LAN_URL = origins[2] || "";
     run(["node_modules/vitest/vitest.mjs", "run", "--no-file-parallelism",
       "tests/line-booking-public-ui.integration.test.ts", "tests/operations-ui.integration.test.ts",
-      "tests/msi-role-ui.integration.test.ts"]);
+      "tests/msi-role-ui.integration.test.ts", "tests/booking-reassignment.integration.test.ts"]);
   } else if (mode === "start") {
     env.MEMBER_VALUE_TEST_ONLY = "true";
     env.PAYROLL_TEST_ONLY = "true";

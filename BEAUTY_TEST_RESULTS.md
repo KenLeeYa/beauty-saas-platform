@@ -1,5 +1,50 @@
 # Test evidence
 
+## 2026-10-18 qualification-change review and confirmed reassignment
+
+Baseline: `cc97237046386c49034536d83ca19d245adf0841` plus this PR increment.
+Only the synthetic loopback `beauty_msi_20261009` database was used. This
+section supersedes the qualification-review follow-up in the older sections.
+
+Merchant entry: operations workspace -> booking reassignment -> qualification
+review. Saving qualification terms returns the affected pending count in the
+same transaction. The worklist is derived from persisted qualification events,
+current terms and future unstarted CONFIRMED/PENDING_PAYMENT bookings; it is
+not a separate task table. Opening or refreshing the view recomputes the list,
+including after concurrent confirmations. Nothing automatically cancels a
+booking or chooses a replacement. The merchant selects a target and reason,
+then explicitly confirms; the server rechecks qualification, shift and capacity.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Qualification boundaries | Passed | Effective-from after service start and effective-until equal to start create pending items; until one millisecond after start remains valid; repeated changes produce one item per affected segment |
+| Existing booking preservation | Passed | Qualification changes leave original assignment/capacity unchanged; online and walk-in intake flags alone do not invalidate existing appointments |
+| Worklist lifecycle | Passed | Qualification restoration, cancellation and successful reassignment remove the item on requery; cancellation and pagination fixtures roll back |
+| Scope and authorization | Passed | Provider denied; foreign tenant/branch list excludes the booking; wrong-branch qualification mutation rejected |
+| Concurrent confirmation | Passed | Two commands with the same expected booking version yield one success and one 409; repeated stale confirmation rejected; exactly one replacement blocking allocation and one outbox event |
+| Failed reassignment | Passed | Target time off returns 409 while original assignment and pending item remain; stale version does not mutate booking |
+| Bounded pagination | Passed | 52+ synthetic segments span 50-row pages with stable ordering and no duplicate IDs; empty out-of-range page preserves total; multi-segment items are flagged for individual handling |
+| HTTP and browser workflow | Passed | Actual authenticated capability PATCH returns pending count; Edge 390x844 opens worklist, selects replacement, confirms PATCH, observes success and removed item, then reloads and verifies persistence; no page errors or horizontal overflow |
+| Full local DB regression | Passed | 25 tests / 24 files, final run at 15:15 local time; includes paid CRM, identity, tenant, booking, member and payroll regressions |
+| Full local UI regression | Passed | 4/4 suites, final run at 15:16 local time; customer booking/cancellation, four-role routing, operations and the new qualification-review workflow; role suite also checks private-LAN entry at 192.168.1.104 |
+| Root quality gates | Passed | Lint: 0 errors, 1 preexisting login-navigation warning; typecheck; local production build; source readiness; root unit suite 104 passed / 28 gated tests skipped |
+| Dependency audit | Passed | npm audit --audit-level moderate: 0 vulnerabilities, no exceptions |
+| Resolved test/tool failures | Resolved | Initial missing-module red test; invalid pagination-fixture duration corrected without weakening DB constraints; premature UI run retried after server health; Windows Prisma DLL lock resolved by serializing DB tests and build |
+| Schema/RLS change | Not applicable | No schema, policy, grant or migration changed; no new local pgTAP claim. Existing migration CI remains a separate pushed-revision gate |
+| Release boundary | Held | PR #2 update only; no merge or deployment, no provider writes or money movement |
+
+Local screenshots/logs remain ignored under `.dev-logs/qualification-*`.
+Test-runner failure output now redacts synthetic session/CSRF cookies and
+authorization headers in addition to database credentials.
+
+Limits: qualification is evaluated at service start, consistent with the booking
+engine. Multi-service or multi-provider bookings are visible but retain the
+existing individual-handling restriction. No background push notification,
+physical-phone test, real OAuth, external delivery or Production verification
+is claimed by this increment. The legacy manual booking lookup remains available
+under a collapsed section. CI readback and AOCI closing are recorded separately
+on the PR after the source becomes stable.
+
 ## 2026-10-18 paid CRM and staff-read security regression
 
 Baseline: `7a725cda196c0f86924840687f6f7ea7ef813e2b` plus the security changes

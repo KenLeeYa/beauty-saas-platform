@@ -29,7 +29,8 @@ function localClock(value: Date, timezone: string): string {
 }
 
 export async function reassignFutureBooking(input: { context: OrganizationContext;
-  bookingId: string; targetStaffId: string; reason: string; requestId: string }): Promise<void> {
+  bookingId: string; targetStaffId: string; reason: string; requestId: string;
+  expectedVersion?: number }): Promise<void> {
   assertCapability(input.context, "booking.manage");
   const location = requireLocation(input.context);
   const reason = input.reason.trim();
@@ -44,7 +45,7 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
     `);
     if (!locked[0]) throw new AppError("NOT_FOUND", "Booking not found", 404);
     const booking = await transaction.bookings.findUniqueOrThrow({ where: { id: input.bookingId },
-      select: { status: true, customer_id: true, service_started_at: true,
+      select: { status: true, version: true, customer_id: true, service_started_at: true,
         booking_segments: { orderBy: { sort_order: "asc" }, select: {
           id: true, assigned_staff_id: true, starts_at: true, ends_at: true,
           service_variant_id: true, pre_buffer_minutes: true,
@@ -54,6 +55,9 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
           booking_segment_id: true,
         } } } });
     const segment = booking.booking_segments[0];
+    if (input.expectedVersion !== undefined && booking.version !== input.expectedVersion) {
+      throw new AppError("CONFLICT", "Booking changed; refresh before reassignment", 409);
+    }
     const old = booking.booking_staff_allocations[0];
     if (!["CONFIRMED", "PENDING_PAYMENT"].includes(booking.status) || booking.service_started_at ||
         booking.booking_segments.length !== 1 || !segment || !old ||
@@ -154,6 +158,8 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
     await transaction.booking_segments.update({ where: { id: segment.id }, data: {
       assigned_staff_id: target.id, staff_name_snapshot: target.display_name,
     } });
+    await transaction.bookings.update({ where: { id: input.bookingId },
+      data: { version: { increment: 1 } } });
     await transaction.booking_events.create({ data: {
       organization_id: input.context.organization.id, location_id: location.id,
       booking_id: input.bookingId, event_type: "STAFF_REASSIGNED",

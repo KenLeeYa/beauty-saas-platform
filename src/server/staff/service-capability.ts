@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { assertCapability, requireLocation, type OrganizationContext } from "../authorization/context";
 import { prisma } from "../database/prisma";
 import { AppError } from "../http/errors";
+import { findQualificationReviews } from "../booking/qualification-review";
 
 export type StaffServiceChannel = "ONLINE" | "WALK_IN" | "MANUAL";
 
@@ -41,7 +42,7 @@ export async function setStaffCapability(input: {
   onlineSelectable: boolean;
   walkInEligible: boolean;
   reason: string;
-}): Promise<void> {
+}): Promise<{ pendingReviewCount: number }> {
   if (!input.context.roles.has("FRONT_DESK")) {
     assertCapability(input.context, "team.manage");
   }
@@ -51,7 +52,7 @@ export async function setStaffCapability(input: {
   }
   const reason = input.reason.trim();
   if (!reason || reason.length > 500) throw new AppError("BAD_REQUEST", "Reason required", 400);
-  await prisma.$transaction(async (transaction) => {
+  return prisma.$transaction(async (transaction) => {
     const rows = await transaction.$queryRaw<{ id: string }[]>(Prisma.sql`
       select assignment.id from public.service_staff_assignments assignment
       join public.location_services service
@@ -81,5 +82,8 @@ export async function setStaffCapability(input: {
         ${input.effectiveFrom}, ${input.effectiveUntil},
         ${input.onlineSelectable}, ${input.walkInEligible}, ${reason})
     `);
+    const reviews = await findQualificationReviews(transaction, input.context,
+      { assignmentId: input.assignmentId });
+    return { pendingReviewCount: reviews.total };
   });
 }

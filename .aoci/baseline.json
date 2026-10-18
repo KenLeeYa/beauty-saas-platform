@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-10-08T10:43:30Z",
-  "updated_at": "2026-10-18T06:10:40Z",
+  "updated_at": "2026-10-18T07:26:20Z",
   "files": {
     ".env.example": {
       "role": "index",
@@ -83,9 +83,9 @@
     },
     "BEAUTY_TEST_RESULTS.md": {
       "role": "index",
-      "sha256": "24d4e8c70bfc434de26e43ec0afe75257e0d1c8dd98231891456ca4100c5afcd",
-      "size": 13997,
-      "normalized_sha256": "24d4e8c70bfc434de26e43ec0afe75257e0d1c8dd98231891456ca4100c5afcd"
+      "sha256": "a77b22448a53ab62f5cbb13d427a3d6e8d6e1ba9ce1dff8fb8f8c7afe9f7f22f",
+      "size": 18582,
+      "normalized_sha256": "a77b22448a53ab62f5cbb13d427a3d6e8d6e1ba9ce1dff8fb8f8c7afe9f7f22f"
     },
     "README.md": {
       "role": "index",
@@ -95,9 +95,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "3973e108189f112d95de2c561820c081007bde407e3bedba6646dd5be2fc1824",
-      "size": 261325,
-      "normalized_sha256": "3973e108189f112d95de2c561820c081007bde407e3bedba6646dd5be2fc1824"
+      "sha256": "71a41dc4ae69e86167efbf4065b12f931bcb2f01df01dccb4d11c55d5aba02cc",
+      "size": 263525,
+      "normalized_sha256": "71a41dc4ae69e86167efbf4065b12f931bcb2f01df01dccb4d11c55d5aba02cc"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -1179,9 +1179,9 @@
     },
     "scripts/msi-local.mjs": {
       "role": "index",
-      "sha256": "eaa144005664d1dc61bd7030d2ed4eb7d251ef5bcd847158339f6f1dad5fc54a",
-      "size": 6241,
-      "normalized_sha256": "eaa144005664d1dc61bd7030d2ed4eb7d251ef5bcd847158339f6f1dad5fc54a"
+      "sha256": "5c47c68cb7cd95985ee8ab67af69d5eff8a330eb6b209aa842f2b4c9656d19c8",
+      "size": 6450,
+      "normalized_sha256": "5c47c68cb7cd95985ee8ab67af69d5eff8a330eb6b209aa842f2b4c9656d19c8"
     },
     "scripts/preview-legacy-booking-import.ts": {
       "role": "index",
@@ -1443,9 +1443,9 @@
     },
     "src/app/api/merchant/bookings/reassign/route.ts": {
       "role": "index",
-      "sha256": "a70c3de0da07d70cbcbddd4394c3f87dd03a3157bce245bac35b3e6cd797ce5b",
-      "size": 2033,
-      "normalized_sha256": "a70c3de0da07d70cbcbddd4394c3f87dd03a3157bce245bac35b3e6cd797ce5b"
+      "sha256": "f53a66df3d0e9eea904266a2655b986a25e9b7427f930f61ec4adcb175f672b4",
+      "size": 2511,
+      "normalized_sha256": "f53a66df3d0e9eea904266a2655b986a25e9b7427f930f61ec4adcb175f672b4"
     },
     "src/app/api/merchant/bookings/status/route.ts": {
       "role": "index",
@@ -1569,9 +1569,9 @@
     },
     "src/app/api/merchant/staff/capabilities/route.ts": {
       "role": "index",
-      "sha256": "e7f7f85f3a37d6440717802ae8d4559d7027f202e65004b2fb66abf5101cd745",
-      "size": 1872,
-      "normalized_sha256": "e7f7f85f3a37d6440717802ae8d4559d7027f202e65004b2fb66abf5101cd745"
+      "sha256": "1c6a95067acf0facb77d46ddf397d5a9fff1a3b81be73bb8bb18b89323f32df0",
+      "size": 1898,
+      "normalized_sha256": "1c6a95067acf0facb77d46ddf397d5a9fff1a3b81be73bb8bb18b89323f32df0"
     },
     "src/app/api/merchant/staff/route.ts": {
       "role": "index",
@@ -1741,17 +1741,23 @@
       "size": 979,
       "normalized_sha256": "7a54135e1e62ff54c266d1edd600b0c377737d27f94be8fbaf0f29ebcfa8e67d"
     },
+    "src/app/merchant/operations/qualification-review.tsx": {
+      "role": "index",
+      "sha256": "6e9c49c25acc8e1d0dd9909466a64069732840c601c03b14db6f600e96b7ae7e",
+      "size": 6285,
+      "normalized_sha256": "6e9c49c25acc8e1d0dd9909466a64069732840c601c03b14db6f600e96b7ae7e"
+    },
     "src/app/merchant/operations/review.module.css": {
       "role": "index",
-      "sha256": "5c2d633782ebe917ca39af1a732d62f220406f4883de49ea6237aa874a94333b",
-      "size": 1624,
-      "normalized_sha256": "5c2d633782ebe917ca39af1a732d62f220406f4883de49ea6237aa874a94333b"
+      "sha256": "3f8cf43a64f4ae6066fd3a511a8b03131b9792729a9a3d26004356414493a0c9",
+      "size": 1969,
+      "normalized_sha256": "3f8cf43a64f4ae6066fd3a511a8b03131b9792729a9a3d26004356414493a0c9"
     },
     "src/app/merchant/operations/review.tsx": {
       "role": "index",
-      "sha256": "7c81d2d99cd0cc3f8b708ab9e99671255288c7d5470f8ce154fc27f28ee38156",
-      "size": 33060,
-      "normalized_sha256": "7c81d2d99cd0cc3f8b708ab9e99671255288c7d5470f8ce154fc27f28ee38156"
+      "sha256": "5a55b989c69c4bf1fef9d89ab3d1770f1ba4637eace1a5e348a4aeea19c91352",
+      "size": 33318,
+      "normalized_sha256": "5a55b989c69c4bf1fef9d89ab3d1770f1ba4637eace1a5e348a4aeea19c91352"
     },
     "src/app/merchant/page.tsx": {
       "role": "index",
@@ -2287,11 +2293,17 @@
       "size": 1687,
       "normalized_sha256": "53d51c6408ae94f7a8d4bfeb560c91dee53658f3596e46a702afe04a35804ac4"
     },
+    "src/server/booking/qualification-review.ts": {
+      "role": "index",
+      "sha256": "8554ffdb564a539589033b0a3e57c61d05ac899216b0de3d70a3650befa69ca0",
+      "size": 3951,
+      "normalized_sha256": "8554ffdb564a539589033b0a3e57c61d05ac899216b0de3d70a3650befa69ca0"
+    },
     "src/server/booking/reassignment.ts": {
       "role": "index",
-      "sha256": "ff929c1da46301de4aa13b44620a1d5e3e3f70957175d58075fbd2f355ddff99",
-      "size": 11691,
-      "normalized_sha256": "ff929c1da46301de4aa13b44620a1d5e3e3f70957175d58075fbd2f355ddff99"
+      "sha256": "d3e49b0b54a81cc0b4496c904b8a88169f02fafdbf3a8a2498ee41f9d469bbfa",
+      "size": 12041,
+      "normalized_sha256": "d3e49b0b54a81cc0b4496c904b8a88169f02fafdbf3a8a2498ee41f9d469bbfa"
     },
     "src/server/booking/state-machine.test.ts": {
       "role": "index",
@@ -2745,9 +2757,9 @@
     },
     "src/server/staff/service-capability.ts": {
       "role": "index",
-      "sha256": "70b462fb89da4433d32dfb65b11f6ad00ec0844895270fa5085103f092e82352",
-      "size": 3953,
-      "normalized_sha256": "70b462fb89da4433d32dfb65b11f6ad00ec0844895270fa5085103f092e82352"
+      "sha256": "718948b742af61fba54fb86f1654acd2ce2a2102b32e48f195db2658080b54ae",
+      "size": 4230,
+      "normalized_sha256": "718948b742af61fba54fb86f1654acd2ce2a2102b32e48f195db2658080b54ae"
     },
     "src/server/storage/provider.ts": {
       "role": "index",
@@ -3015,9 +3027,9 @@
     },
     "tests/booking-reassignment.integration.test.ts": {
       "role": "index",
-      "sha256": "963f98f6a2d3ca700e0b887d9ecda446d90fededbbefefeb2169fbe09998f252",
-      "size": 5974,
-      "normalized_sha256": "963f98f6a2d3ca700e0b887d9ecda446d90fededbbefefeb2169fbe09998f252"
+      "sha256": "478dff52df1c9d420db2dfb8e66c0a931255fe90234b33801606f3d6076fa9af",
+      "size": 15505,
+      "normalized_sha256": "478dff52df1c9d420db2dfb8e66c0a931255fe90234b33801606f3d6076fa9af"
     },
     "tests/customer-status.integration.test.ts": {
       "role": "index",
