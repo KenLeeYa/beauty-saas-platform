@@ -1,4 +1,34 @@
-# Current-run test evidence
+# Test evidence
+
+## 2026-10-18 dependency security candidate
+
+Baseline: `ace1785` plus this security change. Scope: root npm application on
+Node 24.18.0 / npm 11.16.0. PR #2 update is authorized; merge and Production
+deployment are held by the user's subsequent instruction.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Clean install | Passed | `npm ci --no-audit --no-fund`, Prisma generation; initial Windows native-file lock resolved by stopping the test process before reinstalling |
+| Full dependency audit | Passed | `npm audit --audit-level moderate`: 0 vulnerabilities, including dev dependencies; no exceptions |
+| Vulnerable dependency removal | Passed | Root lockfile and installed graph contain neither braces nor micromatch; Next ESLint uses scoped tinyglobby alias |
+| Replacement regression | Passed | 8 tests in `scripts/dependency-security.test.ts`, including actual Next lint diagnostics and bounded malicious input |
+| Root lint | Passed with warning | 0 errors; 1 new Next lint warning on existing internal `window.location.assign` in login form |
+| Typecheck | Passed | `npm run typecheck` after clean install |
+| Unit suite | Passed subset | 93 passed / 28 skipped, 31 passed files / 27 skipped files; skipped integration/browser cases are not passes |
+| Production build | Passed locally | `msi-local.mjs build`: Next 16.4.2 compiled and generated 60 pages using synthetic configuration, not a Production deployment |
+| Source readiness | Passed | `npm run production:check`; Production secrets and live flows are not verified by this command |
+| Dialog UI after CSS dependency removal | Passed | Actual Dialog component plus newly built CSS at 360/390/1280px: open/close, Escape, focus return, animation selector, no overflow/page errors; `.dev-logs/dependency-dialog-*.png` |
+| Secret scan of unpublished history | Passed | Gitleaks scanned 33 commits from `origin/main..HEAD`, no leaks found |
+| DB integration and complete role browser flows | Blocked, not rerun | Shared Docker maintenance; Beauty container stopped and no listener on 3100; no containers/volumes deleted |
+| GitHub CI | See PR #2 | Current remote check results are recorded on the PR, not inferred from the August checks |
+| Production deployment / live verification | Not performed | User requested retaining the PR without merge/deployment |
+
+See `docs/operations/dependency-security-2026-10-18.md` for alternatives, exact
+dependency boundaries and replacement rationale. AOCI delivery completed all
+10 chunks / 353 entries, but attestation schema validation and preexisting
+index drift remain unresolved; complete index alignment is not claimed.
+
+## 2026-10-09 local continuation (historical)
 
 Date: 2026-10-09 (Asia/Taipei). Source baseline: `9cf6dfe` plus the local continuation changes. Environment: loopback synthetic PostgreSQL, Node 24.18.0, npm 11.16.0; no Production writes.
 
