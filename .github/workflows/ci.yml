@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55322/postgres
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:55322/postgres
+      PRISMA_CONNECTION_LIMIT: "2"
+      PRISMA_POOL_TIMEOUT_SECONDS: "5"
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3100
+      PUBLIC_APP_ORIGINS: http://127.0.0.1:3100
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:55321
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-only-publishable-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-only-service-role-key
+      SESSION_SECRET: ci-only-session-secret-0000000000000000
+      CSRF_SECRET: ci-only-csrf-secret-000000000000000000
+      ABUSE_HASH_SECRET: ci-only-abuse-secret-0000000000000000
+      TOKEN_DERIVATION_SECRET: ci-only-token-secret-0000000000000000
+      CRON_SECRET: ci-only-cron-secret-000000000000000000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run production:check

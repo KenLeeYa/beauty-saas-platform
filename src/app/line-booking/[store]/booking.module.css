@@ -1,0 +1,54 @@
+.shell { max-width: 840px; margin: 0 auto; padding: 0 16px calc(88px + env(safe-area-inset-bottom)); color: #243139; }
+.shell [hidden] { display: none !important; }
+.hero { padding: 22px 0 16px; border-bottom: 1px solid #dce2e6; margin-bottom: 16px; }
+.hero h1 { font-size: 28px; line-height: 1.2; margin: 6px 0; }
+.eyebrow { font-size: 11px; font-weight: 800; letter-spacing: 0; color: #5d6b76; }
+.demo { padding: 12px; background: #fff4d7; border: 1px solid #e7ce88; border-radius: 8px; font-size: 14px; }
+.roles { display: flex; gap: 8px; flex-wrap: wrap; }
+.roles a { color: #176d71; padding: 8px; }
+.login { display: block; text-align: center; background: #087843; color: #fff; text-decoration: none; font-weight: 700; padding: 12px; border-radius: 8px; margin: 12px 0; }
+.tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 15; display: flex; justify-content: center; background: #fff; border-top: 1px solid #dce2e6; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
+.tabs button { flex: 1; max-width: 160px; min-width: 0; min-height: 56px; display: grid; justify-items: center; align-content: center; gap: 4px; border: 0; border-radius: 6px; padding: 6px 2px; font-size: 12px; font-weight: 700; color: #5a6873; cursor: pointer; background: #fff; }
+.tabs button[aria-current=page] { color: #146c73; background: #e8f4f3; }
+.panel { padding: 16px 0; margin-bottom: 12px; border-bottom: 1px solid #dce2e6; }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.heading h2 { font-size: 21px; margin: 4px 0 0; }
+.heading > span { font-size: 13px; color: #596773; }
+.progress { display: flex; gap: 4px; margin-bottom: 20px; }
+.progress span { flex: 1; text-align: center; border-top: 3px solid #dce2e6; padding: 8px 2px 0; font-size: 12px; color: #596773; }
+.progress .active { border-color: #217981; color: #155960; font-weight: 700; }
+.fields { display: grid; gap: 10px; }
+.fields label, .panel > label, .rescheduleDialog > label { font-size: 14px; font-weight: 700; }
+.fields input:not([type=radio]), .fields select, .panel > input, .rescheduleDialog > input { width: 100%; min-height: 48px; border: 1px solid #b8c5ce; border-radius: 8px; padding: 10px 12px; background: #fff; color: #243139; }
+.helper { font-size: 13px; line-height: 1.6; color: #596773; margin: 4px 0 12px; }
+.primary, .secondary { min-height: 48px; border-radius: 8px; border: 0; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+.primary { background: #176d73; color: #fff; }
+.secondary { background: #edf0f3; color: #243139; }
+.primary:disabled, .secondary:disabled { opacity: .5; cursor: not-allowed; }
+.fields > .primary { margin-top: 12px; }
+.actions { display: flex; gap: 10px; margin-top: 16px; }
+.actions button { flex: 1; min-width: 0; }
+.slotField { border: 0; padding: 0; margin: 12px 0 0; }
+.slotField legend { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+.slotGrid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; max-height: 264px; overflow-y: auto; padding: 3px; }
+.slot, .chosenSlot { display: flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid #b8c5ce; border-radius: 6px; font-size: 14px; cursor: pointer; }
+.slot input, .chosenSlot input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.chosenSlot { border: 2px solid #176d73; background: #e8f4f3; font-weight: 800; }
+.slot:focus-within, .chosenSlot:focus-within { outline: 3px solid #278992; outline-offset: 1px; }
+.summary { display: grid; gap: 6px; border-left: 3px solid #217981; padding: 10px 12px; margin-bottom: 10px; background: #f4f7f9; }
+.summary span { font-size: 14px; }
+.success { text-align: center; display: grid; gap: 8px; justify-items: center; padding: 12px; }
+.success h3 { font-size: 22px; margin: 4px 0; }
+.success p { margin: 0; }
+.success small { word-break: break-all; color: #596773; }
+.success button { margin-top: 12px; }
+.check { background: #e8f4f3; color: #176d73; border-radius: 50%; width: 48px; height: 48px; display: grid; place-items: center; font-size: 26px; }
+.visit { display: grid; gap: 7px; border-top: 1px solid #dce2e6; padding: 14px 0; }
+.visit span, .visit small { color: #596773; }
+.cardActions { display: flex; gap: 10px; margin-top: 4px; }
+.cardActions button { min-height: 44px; border: 1px solid #b8c5ce; color: #176d73; background: #fff; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+.badge { color: #155960; background: #e8f4f3; padding: 6px 10px; border-radius: 6px; }
+.error { background: #fff0ed; color: #a02624; padding: 12px; border-radius: 6px; }
+.rescheduleDialog { display: grid; gap: 12px; max-height: 85dvh; overflow-y: auto; border-radius: 8px; }
+@media (min-width:640px) { .hero h1 { font-size: 32px; } .slotGrid { grid-template-columns: repeat(4,minmax(0,1fr)); } }
+@media (prefers-reduced-motion:reduce) { .shell * { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }
