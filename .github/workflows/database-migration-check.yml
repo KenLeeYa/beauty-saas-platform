@@ -1,0 +1,26 @@
+name: Database Migration Check
+
+on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - "prisma/**"
+      - "package.json"
+      - "package-lock.json"
+
+jobs:
+  migration-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run db:start
+      - run: npm run db:reset
+      - run: npm run db:test
+      - run: npm run db:lint
+      - if: always()
+        run: npm run db:stop

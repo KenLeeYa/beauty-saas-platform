@@ -1,0 +1,2265 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model audit_logs {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String?        @db.Uuid
+  location_id      String?        @db.Uuid
+  actor_profile_id String?        @db.Uuid
+  action           String
+  target_type      String
+  target_id        String?
+  outcome          audit_outcome
+  request_id       String
+  ip_hash          String?
+  before_json      Json?
+  after_json       Json?
+  metadata         Json           @default("{}")
+  created_at       DateTime       @default(now()) @db.Timestamptz(6)
+  profiles         profiles?      @relation(fields: [actor_profile_id], references: [id], onUpdate: NoAction)
+  locations        locations?     @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "audit_logs_location_fk")
+  organizations    organizations? @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([actor_profile_id, created_at(sort: Desc)], map: "audit_logs_actor_created_idx")
+  @@index([location_id, created_at(sort: Desc)], map: "audit_logs_location_created_idx")
+  @@index([organization_id, created_at(sort: Desc)], map: "audit_logs_org_created_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model auth_sessions {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profile_id      String    @db.Uuid
+  token_hash      String    @unique
+  csrf_token_hash String
+  expires_at      DateTime  @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  last_seen_at    DateTime  @default(now()) @db.Timestamptz(6)
+  revoked_at      DateTime? @db.Timestamptz(6)
+  user_agent_hash String?
+  ip_hash         String?
+  profiles        profiles  @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([profile_id, expires_at(sort: Desc)], map: "auth_sessions_profile_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model billing_notifications {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id   String        @db.Uuid
+  notification_type String
+  level             String        @default("INFO")
+  title             String
+  message           String
+  effective_at      DateTime      @default(now()) @db.Timestamptz(6)
+  expires_at        DateTime?     @db.Timestamptz(6)
+  acknowledged_at   DateTime?     @db.Timestamptz(6)
+  created_at        DateTime      @default(now()) @db.Timestamptz(6)
+  organizations     organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model billing_usage_summaries {
+  id                 String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id    String        @db.Uuid
+  period_start       DateTime      @db.Date
+  period_end         DateTime      @db.Date
+  event_type         String
+  quantity           BigInt        @default(0)
+  last_calculated_at DateTime      @default(now()) @db.Timestamptz(6)
+  created_at         DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime      @default(now()) @db.Timestamptz(6)
+  organizations      organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([organization_id, period_start, period_end, event_type], map: "billing_usage_summaries_unique")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model booking_access_tokens {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String    @db.Uuid
+  booking_id      String    @db.Uuid
+  token_hash      String    @unique
+  purpose         String    @default("MANAGE")
+  expires_at      DateTime  @db.Timestamptz(6)
+  revoked_at      DateTime? @db.Timestamptz(6)
+  last_used_at    DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  bookings        bookings  @relation(fields: [organization_id, booking_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_access_tokens_booking_fk")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model booking_events {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String          @db.Uuid
+  location_id      String          @db.Uuid
+  booking_id       String          @db.Uuid
+  event_type       String
+  previous_status  booking_status?
+  new_status       booking_status?
+  actor_profile_id String?         @db.Uuid
+  public_actor     Boolean         @default(false)
+  reason_code      String?
+  metadata         Json            @default("{}")
+  created_at       DateTime        @default(now()) @db.Timestamptz(6)
+  profiles         profiles?       @relation(fields: [actor_profile_id], references: [id], onUpdate: NoAction)
+  bookings         bookings        @relation(fields: [organization_id, booking_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_events_booking_fk")
+  locations        locations       @relation(fields: [organization_id, location_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_events_location_fk")
+
+  @@index([booking_id, created_at], map: "booking_events_booking_idx")
+  @@index([organization_id, location_id, created_at(sort: Desc)], map: "booking_events_location_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model booking_holds {
+  id                           String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id              String                         @db.Uuid
+  location_id                  String                         @db.Uuid
+  public_booking_session_id    String                         @db.Uuid
+  service_variant_id           String                         @db.Uuid
+  staff_profile_id             String                         @db.Uuid
+  starts_at                    DateTime                       @db.Timestamptz(6)
+  ends_at                      DateTime                       @db.Timestamptz(6)
+  status                       booking_hold_status            @default(ACTIVE)
+  token_hash                   String                         @unique
+  idempotency_key_hash         String
+  expires_at                   DateTime                       @db.Timestamptz(6)
+  confirmed_at                 DateTime?                      @db.Timestamptz(6)
+  cancelled_at                 DateTime?                      @db.Timestamptz(6)
+  created_at                   DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime                       @default(now()) @db.Timestamptz(6)
+  locations                    locations                      @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_holds_location_fk")
+  public_booking_sessions      public_booking_sessions        @relation(fields: [organization_id, public_booking_session_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_holds_session_fk")
+  staff_profiles               staff_profiles                 @relation(fields: [organization_id, staff_profile_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_holds_staff_fk")
+  service_variants             service_variants               @relation(fields: [organization_id, service_variant_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_holds_variant_fk")
+  booking_resource_allocations booking_resource_allocations[]
+  booking_staff_allocations    booking_staff_allocations[]
+
+  @@unique([public_booking_session_id, idempotency_key_hash], map: "booking_holds_idempotency_unique")
+  @@unique([organization_id, id], map: "booking_holds_org_id_unique")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model booking_payment_attempts {
+  id                   String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id      String                         @db.Uuid
+  booking_id           String                         @db.Uuid
+  booking_payment_id   String?                        @db.Uuid
+  provider             String
+  status               booking_payment_attempt_status @default(PENDING)
+  idempotency_key_hash String
+  provider_reference   String?
+  error_code           String?
+  attempted_at         DateTime                       @default(now()) @db.Timestamptz(6)
+  completed_at         DateTime?                      @db.Timestamptz(6)
+  bookings             bookings                       @relation(fields: [organization_id, booking_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_payment_attempts_booking_fk")
+  booking_payments     booking_payments?              @relation(fields: [organization_id, booking_payment_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_payment_attempts_payment_fk")
+
+  @@unique([booking_id, idempotency_key_hash], map: "booking_payment_attempts_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model booking_payment_proofs {
+  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id    String            @db.Uuid
+  location_id        String            @db.Uuid
+  booking_id         String            @db.Uuid
+  booking_payment_id String?           @db.Uuid
+  object_path        String            @unique
+  mime_type          String
+  size_bytes         Int
+  checksum           String?
+  uploaded_at        DateTime          @default(now()) @db.Timestamptz(6)
+  reviewed_by        String?           @db.Uuid
+  reviewed_at        DateTime?         @db.Timestamptz(6)
+  rejected_at        DateTime?         @db.Timestamptz(6)
+  deleted_at         DateTime?         @db.Timestamptz(6)
+  bookings           bookings          @relation(fields: [organization_id, booking_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_payment_proofs_booking_fk")
+  locations          locations         @relation(fields: [organization_id, location_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_payment_proofs_location_fk")
+  booking_payments   booking_payments? @relation(fields: [organization_id, booking_payment_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_payment_proofs_payment_fk")
+  profiles           profiles?         @relation(fields: [reviewed_by], references: [id], onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model booking_payments {
+  id                                               String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                  String                     @db.Uuid
+  location_id                                      String                     @db.Uuid
+  booking_id                                       String                     @db.Uuid
+  method                                           booking_payment_method
+  status                                           booking_payment_status     @default(UNPAID)
+  amount_minor                                     Int
+  currency                                         String                     @default("TWD")
+  reference                                        String?
+  note                                             String?
+  recorded_by                                      String?                    @db.Uuid
+  confirmed_by                                     String?                    @db.Uuid
+  confirmed_at                                     DateTime?                  @db.Timestamptz(6)
+  failed_at                                        DateTime?                  @db.Timestamptz(6)
+  created_at                                       DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at                                       DateTime                   @default(now()) @db.Timestamptz(6)
+  booking_payment_attempts                         booking_payment_attempts[]
+  booking_payment_proofs                           booking_payment_proofs[]
+  bookings                                         bookings                   @relation(fields: [organization_id, booking_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_payments_booking_fk")
+  profiles_booking_payments_confirmed_byToprofiles profiles?                  @relation("booking_payments_confirmed_byToprofiles", fields: [confirmed_by], references: [id], onUpdate: NoAction)
+  locations                                        locations                  @relation(fields: [organization_id, location_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_payments_location_fk")
+  profiles_booking_payments_recorded_byToprofiles  profiles?                  @relation("booking_payments_recorded_byToprofiles", fields: [recorded_by], references: [id], onUpdate: NoAction)
+  booking_refunds                                  booking_refunds[]
+
+  @@unique([organization_id, id], map: "booking_payments_org_id_unique")
+  @@index([booking_id, status, created_at(sort: Desc)], map: "booking_payments_booking_idx")
+  @@index([organization_id, location_id, status, created_at(sort: Desc)], map: "booking_payments_org_status_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model booking_refunds {
+  id                                              String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                 String                @db.Uuid
+  booking_id                                      String                @db.Uuid
+  booking_payment_id                              String                @db.Uuid
+  status                                          booking_refund_status @default(PENDING)
+  amount_minor                                    Int
+  reason                                          String
+  calculation_snapshot                            Json                  @default("{}")
+  recorded_by                                     String                @db.Uuid
+  confirmed_by                                    String?               @db.Uuid
+  confirmed_at                                    DateTime?             @db.Timestamptz(6)
+  created_at                                      DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at                                      DateTime              @default(now()) @db.Timestamptz(6)
+  bookings                                        bookings              @relation(fields: [organization_id, booking_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_refunds_booking_fk")
+  profiles_booking_refunds_confirmed_byToprofiles profiles?             @relation("booking_refunds_confirmed_byToprofiles", fields: [confirmed_by], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  booking_payments                                booking_payments      @relation(fields: [organization_id, booking_payment_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_refunds_payment_fk")
+  profiles_booking_refunds_recorded_byToprofiles  profiles              @relation("booking_refunds_recorded_byToprofiles", fields: [recorded_by], references: [id], onUpdate: NoAction)
+
+  @@index([booking_id, status, created_at(sort: Desc)], map: "booking_refunds_booking_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model booking_resource_allocations {
+  id                 String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id    String                    @db.Uuid
+  location_id        String                    @db.Uuid
+  booking_id         String?                   @db.Uuid
+  booking_hold_id    String?                   @db.Uuid
+  booking_segment_id String?                   @db.Uuid
+  resource_id        String                    @db.Uuid
+  starts_at          DateTime                  @db.Timestamptz(6)
+  ends_at            DateTime                  @db.Timestamptz(6)
+  is_blocking        Boolean                   @default(true)
+  time_range         Unsupported("tstzrange")? @default(dbgenerated("tstzrange(starts_at, ends_at, '[)'::text)"))
+  created_at         DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime                  @default(now()) @db.Timestamptz(6)
+  bookings           bookings?                 @relation(fields: [organization_id, booking_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_resource_allocations_booking_fk")
+  booking_holds      booking_holds?            @relation(fields: [organization_id, booking_hold_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_resource_allocations_hold_fk")
+  locations          locations                 @relation(fields: [organization_id, location_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_resource_allocations_location_fk")
+  resources          resources                 @relation(fields: [organization_id, resource_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_resource_allocations_resource_fk")
+  booking_segments   booking_segments?         @relation(fields: [organization_id, booking_segment_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_resource_allocations_segment_fk")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model booking_segments {
+  id                             String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                String                         @db.Uuid
+  location_id                    String                         @db.Uuid
+  booking_id                     String                         @db.Uuid
+  service_id                     String?                        @db.Uuid
+  service_variant_id             String?                        @db.Uuid
+  assigned_staff_id              String?                        @db.Uuid
+  service_name_snapshot          String
+  variant_name_snapshot          String
+  staff_name_snapshot            String?
+  starts_at                      DateTime                       @db.Timestamptz(6)
+  ends_at                        DateTime                       @db.Timestamptz(6)
+  duration_minutes               Int
+  pre_buffer_minutes             Int                            @default(0)
+  post_buffer_minutes            Int                            @default(0)
+  price_minor                    Int
+  sort_order                     Int                            @default(0)
+  resource_requirements_snapshot Json                           @default("[]")
+  created_at                     DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at                     DateTime                       @default(now()) @db.Timestamptz(6)
+  booking_resource_allocations   booking_resource_allocations[]
+  bookings                       bookings                       @relation(fields: [organization_id, booking_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_segments_booking_fk")
+  locations                      locations                      @relation(fields: [organization_id, location_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_segments_location_fk")
+  services                       services?                      @relation(fields: [organization_id, service_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_segments_service_fk")
+  staff_profiles                 staff_profiles?                @relation(fields: [organization_id, assigned_staff_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_segments_staff_fk")
+  service_variants               service_variants?              @relation(fields: [organization_id, service_variant_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_segments_variant_fk")
+  booking_staff_allocations      booking_staff_allocations[]
+
+  @@unique([booking_id, sort_order], map: "booking_segments_booking_sort_unique")
+  @@unique([organization_id, id], map: "booking_segments_org_id_unique")
+  @@index([organization_id, location_id, starts_at, ends_at], map: "booking_segments_calendar_idx")
+  @@index([organization_id, assigned_staff_id, starts_at], map: "booking_segments_staff_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model booking_staff_allocations {
+  id                 String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id    String                    @db.Uuid
+  location_id        String                    @db.Uuid
+  booking_id         String?                   @db.Uuid
+  booking_hold_id    String?                   @db.Uuid
+  booking_segment_id String?                   @db.Uuid
+  staff_profile_id   String                    @db.Uuid
+  starts_at          DateTime                  @db.Timestamptz(6)
+  ends_at            DateTime                  @db.Timestamptz(6)
+  is_blocking        Boolean                   @default(true)
+  time_range         Unsupported("tstzrange")? @default(dbgenerated("tstzrange(starts_at, ends_at, '[)'::text)"))
+  created_at         DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime                  @default(now()) @db.Timestamptz(6)
+  bookings           bookings?                 @relation(fields: [organization_id, booking_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_staff_allocations_booking_fk")
+  booking_holds      booking_holds?            @relation(fields: [organization_id, booking_hold_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_staff_allocations_hold_fk")
+  locations          locations                 @relation(fields: [organization_id, location_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_staff_allocations_location_fk")
+  booking_segments   booking_segments?         @relation(fields: [organization_id, booking_segment_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "booking_staff_allocations_segment_fk")
+  staff_profiles     staff_profiles            @relation(fields: [organization_id, staff_profile_id], references: [organization_id, id], onUpdate: NoAction, map: "booking_staff_allocations_staff_fk")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model bookings {
+  id                                                                            String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                                               String                         @db.Uuid
+  location_id                                                                   String                         @db.Uuid
+  customer_id                                                                   String                         @db.Uuid
+  source                                                                        booking_source                 @default(ONLINE)
+  status                                                                        booking_status
+  payment_status                                                                booking_payment_status         @default(UNPAID)
+  subtotal_minor                                                                Int
+  discount_minor                                                                Int                            @default(0)
+  total_minor                                                                   Int
+  deposit_required_minor                                                        Int                            @default(0)
+  paid_minor                                                                    Int                            @default(0)
+  refunded_minor                                                                Int                            @default(0)
+  cancellation_fee_minor                                                        Int                            @default(0)
+  currency                                                                      String                         @default("TWD")
+  policy_snapshot                                                               Json                           @default("{}")
+  cancellation_calculation                                                      Json?
+  public_note                                                                   String?
+  internal_note                                                                 String?
+  tracking_token_hash                                                           String                         @unique
+  version                                                                       Int                            @default(1)
+  is_test                                                                       Boolean                        @default(false)
+  rescheduled_from_booking_id                                                   String?                        @db.Uuid
+  rescheduled_to_booking_id                                                     String?                        @db.Uuid
+  confirmed_at                                                                  DateTime?                      @db.Timestamptz(6)
+  checked_in_at                                                                 DateTime?                      @db.Timestamptz(6)
+  service_started_at                                                            DateTime?                      @db.Timestamptz(6)
+  completed_at                                                                  DateTime?                      @db.Timestamptz(6)
+  cancelled_at                                                                  DateTime?                      @db.Timestamptz(6)
+  expired_at                                                                    DateTime?                      @db.Timestamptz(6)
+  created_by                                                                    String?                        @db.Uuid
+  updated_by                                                                    String?                        @db.Uuid
+  created_at                                                                    DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at                                                                    DateTime                       @default(now()) @db.Timestamptz(6)
+  booking_access_tokens                                                         booking_access_tokens[]
+  booking_events                                                                booking_events[]
+  booking_payment_attempts                                                      booking_payment_attempts[]
+  booking_payment_proofs                                                        booking_payment_proofs[]
+  booking_payments                                                              booking_payments[]
+  booking_refunds                                                               booking_refunds[]
+  booking_resource_allocations                                                  booking_resource_allocations[]
+  booking_segments                                                              booking_segments[]
+  booking_staff_allocations                                                     booking_staff_allocations[]
+  profiles_bookings_created_byToprofiles                                        profiles?                      @relation("bookings_created_byToprofiles", fields: [created_by], references: [id], onUpdate: NoAction)
+  customers                                                                     customers                      @relation(fields: [organization_id, customer_id], references: [organization_id, id], onUpdate: NoAction, map: "bookings_customer_fk")
+  locations                                                                     locations                      @relation(fields: [organization_id, location_id], references: [organization_id, id], onUpdate: NoAction, map: "bookings_location_fk")
+  bookings_bookings_organization_id_rescheduled_from_booking_idTobookings       bookings?                      @relation("bookings_organization_id_rescheduled_from_booking_idTobookings", fields: [organization_id, rescheduled_from_booking_id], references: [organization_id, id], onUpdate: NoAction, map: "bookings_rescheduled_from_fk")
+  other_bookings_bookings_organization_id_rescheduled_from_booking_idTobookings bookings[]                     @relation("bookings_organization_id_rescheduled_from_booking_idTobookings")
+  bookings_bookings_organization_id_rescheduled_to_booking_idTobookings         bookings?                      @relation("bookings_organization_id_rescheduled_to_booking_idTobookings", fields: [organization_id, rescheduled_to_booking_id], references: [organization_id, id], onUpdate: NoAction, map: "bookings_rescheduled_to_fk")
+  other_bookings_bookings_organization_id_rescheduled_to_booking_idTobookings   bookings[]                     @relation("bookings_organization_id_rescheduled_to_booking_idTobookings")
+  profiles_bookings_updated_byToprofiles                                        profiles?                      @relation("bookings_updated_byToprofiles", fields: [updated_by], references: [id], onUpdate: NoAction)
+  merchant_setup_progress                                                       merchant_setup_progress?
+  notification_outbox                                                           notification_outbox[]
+
+  @@unique([organization_id, id], map: "bookings_org_id_unique")
+  @@index([organization_id, customer_id, created_at(sort: Desc)], map: "bookings_customer_history_idx")
+  @@index([organization_id, location_id, status, created_at(sort: Desc)], map: "bookings_location_calendar_idx")
+  @@index([organization_id, payment_status, created_at(sort: Desc)], map: "bookings_payment_status_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model cancellation_policies {
+  id                      String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id         String                @db.Uuid
+  location_id             String                @db.Uuid
+  service_variant_id      String?               @db.Uuid
+  name                    String
+  free_cancellation_hours Int                   @default(24)
+  late_fee_mode           cancellation_fee_mode @default(NONE)
+  late_fee_fixed_minor    Int?
+  late_fee_percentage     Decimal?              @db.Decimal(5, 2)
+  no_show_fee_mode        cancellation_fee_mode @default(NONE)
+  no_show_fee_fixed_minor Int?
+  no_show_fee_percentage  Decimal?              @db.Decimal(5, 2)
+  is_active               Boolean               @default(true)
+  created_at              DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime              @default(now()) @db.Timestamptz(6)
+  locations               locations             @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "cancellation_policies_location_fk")
+  service_variants        service_variants?     @relation(fields: [organization_id, service_variant_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "cancellation_policies_variant_fk")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customer_consents {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String           @db.Uuid
+  customer_id     String           @db.Uuid
+  consent_type    consent_type
+  status          consent_status
+  captured_at     DateTime         @default(now()) @db.Timestamptz(6)
+  source          String
+  policy_version  String
+  evidence_hash   String?
+  created_by      String?          @db.Uuid
+  created_at      DateTime         @default(now()) @db.Timestamptz(6)
+  profiles        profiles?        @relation(fields: [created_by], references: [id], onUpdate: NoAction)
+  customers       customers        @relation(fields: [organization_id, customer_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "customer_consents_customer_fk")
+  customer_media  customer_media[]
+
+  @@index([organization_id, customer_id, consent_type, captured_at(sort: Desc)], map: "customer_consents_latest_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customer_contact_links {
+  id                      String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id         String               @db.Uuid
+  customer_id             String               @db.Uuid
+  channel                 notification_channel
+  provider_user_reference String
+  provider_user_hash      String
+  is_active               Boolean              @default(true)
+  linked_at               DateTime             @default(now()) @db.Timestamptz(6)
+  revoked_at              DateTime?            @db.Timestamptz(6)
+  created_at              DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime             @default(now()) @db.Timestamptz(6)
+  customers               customers            @relation(fields: [organization_id, customer_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "customer_contact_links_customer_fk")
+
+  @@unique([organization_id, channel, provider_user_hash], map: "customer_contact_links_unique")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customer_contacts {
+  id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String                @db.Uuid
+  customer_id      String                @db.Uuid
+  contact_type     customer_contact_type
+  value            String
+  normalized_value String
+  is_primary       Boolean               @default(false)
+  is_verified      Boolean               @default(false)
+  created_at       DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime              @default(now()) @db.Timestamptz(6)
+  customers        customers             @relation(fields: [organization_id, customer_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "customer_contacts_customer_fk")
+
+  @@unique([organization_id, contact_type, normalized_value], map: "customer_contacts_org_normalized_uidx")
+  @@index([organization_id, customer_id], map: "customer_contacts_customer_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customer_media {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id   String             @db.Uuid
+  location_id       String?            @db.Uuid
+  customer_id       String             @db.Uuid
+  object_path       String             @unique(map: "customer_media_object_path_unique")
+  media_type        String
+  mime_type         String
+  size_bytes        Int
+  checksum          String?
+  consent_id        String?            @db.Uuid
+  uploaded_by       String             @db.Uuid
+  created_at        DateTime           @default(now()) @db.Timestamptz(6)
+  deleted_at        DateTime?          @db.Timestamptz(6)
+  retention_until   DateTime?          @db.Timestamptz(6)
+  customer_consents customer_consents? @relation(fields: [consent_id], references: [id], onUpdate: NoAction)
+  customers         customers          @relation(fields: [organization_id, customer_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "customer_media_customer_fk")
+  locations         locations?         @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "customer_media_location_fk")
+  profiles          profiles           @relation(fields: [uploaded_by], references: [id], onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customer_merge_events {
+  id                                                                            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                                               String    @db.Uuid
+  source_customer_id                                                            String    @db.Uuid
+  target_customer_id                                                            String    @db.Uuid
+  merged_by                                                                     String    @db.Uuid
+  reason                                                                        String
+  source_snapshot                                                               Json
+  created_at                                                                    DateTime  @default(now()) @db.Timestamptz(6)
+  profiles                                                                      profiles  @relation(fields: [merged_by], references: [id], onUpdate: NoAction)
+  customers_customer_merge_events_organization_id_source_customer_idTocustomers customers @relation("customer_merge_events_organization_id_source_customer_idTocustomers", fields: [organization_id, source_customer_id], references: [organization_id, id], onUpdate: NoAction, map: "customer_merge_source_fk")
+  customers_customer_merge_events_organization_id_target_customer_idTocustomers customers @relation("customer_merge_events_organization_id_target_customer_idTocustomers", fields: [organization_id, target_customer_id], references: [organization_id, id], onUpdate: NoAction, map: "customer_merge_target_fk")
+
+  @@index([organization_id, created_at(sort: Desc)], map: "customer_merge_events_org_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customer_metrics {
+  customer_id          String    @id @db.Uuid
+  organization_id      String    @db.Uuid
+  last_service_at      DateTime? @db.Timestamptz(6)
+  completed_count      Int       @default(0)
+  cancelled_count      Int       @default(0)
+  no_show_count        Int       @default(0)
+  total_spend_minor    BigInt    @default(0)
+  average_ticket_minor Int       @default(0)
+  estimated_ltv_minor  BigInt    @default(0)
+  expected_return_date DateTime? @db.Date
+  updated_at           DateTime  @default(now()) @db.Timestamptz(6)
+  customers            customers @relation(fields: [organization_id, customer_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "customer_metrics_customer_fk")
+
+  @@unique([organization_id, customer_id], map: "customer_metrics_org_customer_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customer_notes {
+  id                                           String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                              String                    @db.Uuid
+  customer_id                                  String                    @db.Uuid
+  sensitivity                                  customer_note_sensitivity @default(STANDARD)
+  note                                         String
+  created_by                                   String                    @db.Uuid
+  updated_by                                   String?                   @db.Uuid
+  created_at                                   DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at                                   DateTime                  @default(now()) @db.Timestamptz(6)
+  deleted_at                                   DateTime?                 @db.Timestamptz(6)
+  profiles_customer_notes_created_byToprofiles profiles                  @relation("customer_notes_created_byToprofiles", fields: [created_by], references: [id], onUpdate: NoAction)
+  customers                                    customers                 @relation(fields: [organization_id, customer_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "customer_notes_customer_fk")
+  profiles_customer_notes_updated_byToprofiles profiles?                 @relation("customer_notes_updated_byToprofiles", fields: [updated_by], references: [id], onDelete: Restrict, onUpdate: NoAction)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customer_tag_assignments {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String        @db.Uuid
+  customer_id     String        @db.Uuid
+  tag_id          String        @db.Uuid
+  assigned_by     String?       @db.Uuid
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  profiles        profiles?     @relation(fields: [assigned_by], references: [id], onUpdate: NoAction)
+  customers       customers     @relation(fields: [organization_id, customer_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "customer_tag_assignments_customer_fk")
+  customer_tags   customer_tags @relation(fields: [organization_id, tag_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "customer_tag_assignments_tag_fk")
+
+  @@unique([customer_id, tag_id], map: "customer_tag_assignments_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customer_tags {
+  id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id          String                     @db.Uuid
+  name                     String
+  color                    String?
+  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  customer_tag_assignments customer_tag_assignments[]
+  organizations            organizations              @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([organization_id, id], map: "customer_tags_org_id_unique")
+  @@unique([organization_id, name], map: "customer_tags_org_name_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customers {
+  id                                                                                        String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                                                           String                     @db.Uuid
+  display_name                                                                              String
+  birthday                                                                                  DateTime?                  @db.Date
+  preferred_language                                                                        String                     @default("zh-Hant-TW")
+  contact_preference                                                                        customer_contact_type?
+  source                                                                                    customer_source            @default(OTHER)
+  preferred_staff_id                                                                        String?                    @db.Uuid
+  general_preferences                                                                       String?
+  deposit_mode                                                                              customer_deposit_mode      @default(DEFAULT)
+  is_blacklisted                                                                            Boolean                    @default(false)
+  blacklist_reason                                                                          String?
+  blacklisted_at                                                                            DateTime?                  @db.Timestamptz(6)
+  is_active                                                                                 Boolean                    @default(true)
+  anonymized_at                                                                             DateTime?                  @db.Timestamptz(6)
+  created_at                                                                                DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at                                                                                DateTime                   @default(now()) @db.Timestamptz(6)
+  bookings                                                                                  bookings[]
+  customer_consents                                                                         customer_consents[]
+  customer_contact_links                                                                    customer_contact_links[]
+  customer_contacts                                                                         customer_contacts[]
+  customer_media                                                                            customer_media[]
+  customer_merge_events_customer_merge_events_organization_id_source_customer_idTocustomers customer_merge_events[]    @relation("customer_merge_events_organization_id_source_customer_idTocustomers")
+  customer_merge_events_customer_merge_events_organization_id_target_customer_idTocustomers customer_merge_events[]    @relation("customer_merge_events_organization_id_target_customer_idTocustomers")
+  customer_metrics                                                                          customer_metrics?
+  customer_notes                                                                            customer_notes[]
+  customer_tag_assignments                                                                  customer_tag_assignments[]
+  organizations                                                                             organizations              @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  staff_profiles                                                                            staff_profiles?            @relation(fields: [organization_id, preferred_staff_id], references: [organization_id, id], onDelete: SetNull, onUpdate: NoAction, map: "customers_preferred_staff_fk")
+  line_link_sessions                                                                        line_link_sessions[]
+  notification_outbox                                                                       notification_outbox[]
+
+  @@unique([organization_id, id], map: "customers_org_id_unique")
+  @@index([organization_id, is_active, created_at(sort: Desc)], map: "customers_org_active_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model daily_location_summaries {
+  id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id          String    @db.Uuid
+  location_id              String    @db.Uuid
+  business_date            DateTime  @db.Date
+  booking_count            Int       @default(0)
+  confirmed_count          Int       @default(0)
+  completed_count          Int       @default(0)
+  cancelled_count          Int       @default(0)
+  no_show_count            Int       @default(0)
+  new_customer_count       Int       @default(0)
+  returning_customer_count Int       @default(0)
+  gross_revenue_minor      BigInt    @default(0)
+  deposit_collected_minor  BigInt    @default(0)
+  refunded_minor           BigInt    @default(0)
+  cancellation_fee_minor   BigInt    @default(0)
+  average_ticket_minor     Int       @default(0)
+  available_minutes        Int       @default(0)
+  service_minutes          Int       @default(0)
+  last_calculated_at       DateTime  @default(now()) @db.Timestamptz(6)
+  created_at               DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime  @default(now()) @db.Timestamptz(6)
+  locations                locations @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "daily_location_summaries_location_fk")
+
+  @@unique([location_id, business_date], map: "daily_location_summaries_unique")
+  @@index([organization_id, business_date(sort: Desc), location_id], map: "daily_location_summaries_org_date_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model daily_service_summaries {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id    String           @db.Uuid
+  location_id        String           @db.Uuid
+  service_variant_id String           @db.Uuid
+  business_date      DateTime         @db.Date
+  booking_count      Int              @default(0)
+  completed_count    Int              @default(0)
+  cancelled_count    Int              @default(0)
+  no_show_count      Int              @default(0)
+  service_minutes    Int              @default(0)
+  revenue_minor      BigInt           @default(0)
+  last_calculated_at DateTime         @default(now()) @db.Timestamptz(6)
+  created_at         DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime         @default(now()) @db.Timestamptz(6)
+  locations          locations        @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "daily_service_summaries_location_fk")
+  service_variants   service_variants @relation(fields: [organization_id, service_variant_id], references: [organization_id, id], onUpdate: NoAction, map: "daily_service_summaries_variant_fk")
+
+  @@unique([location_id, service_variant_id, business_date], map: "daily_service_summaries_unique")
+  @@index([organization_id, business_date(sort: Desc), service_variant_id], map: "daily_service_summaries_org_date_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model daily_staff_summaries {
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id    String         @db.Uuid
+  location_id        String         @db.Uuid
+  staff_profile_id   String         @db.Uuid
+  business_date      DateTime       @db.Date
+  booking_count      Int            @default(0)
+  completed_count    Int            @default(0)
+  cancelled_count    Int            @default(0)
+  no_show_count      Int            @default(0)
+  service_minutes    Int            @default(0)
+  available_minutes  Int            @default(0)
+  revenue_minor      BigInt         @default(0)
+  last_calculated_at DateTime       @default(now()) @db.Timestamptz(6)
+  created_at         DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime       @default(now()) @db.Timestamptz(6)
+  locations          locations      @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "daily_staff_summaries_location_fk")
+  staff_profiles     staff_profiles @relation(fields: [organization_id, staff_profile_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "daily_staff_summaries_staff_fk")
+
+  @@unique([location_id, staff_profile_id, business_date], map: "daily_staff_summaries_unique")
+  @@index([organization_id, business_date(sort: Desc), staff_profile_id], map: "daily_staff_summaries_org_date_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model deposit_policies {
+  id                     String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id        String            @db.Uuid
+  location_id            String            @db.Uuid
+  service_variant_id     String?           @db.Uuid
+  name                   String
+  mode                   deposit_mode      @default(NONE)
+  fixed_amount_minor     Int?
+  percentage             Decimal?          @db.Decimal(5, 2)
+  payment_window_minutes Int               @default(15)
+  is_active              Boolean           @default(true)
+  created_at             DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime          @default(now()) @db.Timestamptz(6)
+  locations              locations         @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "deposit_policies_location_fk")
+  service_variants       service_variants? @relation(fields: [organization_id, service_variant_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "deposit_policies_variant_fk")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model invoice_line_items {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String   @db.Uuid
+  invoice_id       String   @db.Uuid
+  item_type        String
+  description      String
+  quantity         Int      @default(1)
+  unit_price_minor Int
+  amount_minor     Int
+  metadata         Json     @default("{}")
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  invoices         invoices @relation(fields: [organization_id, invoice_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "invoice_line_items_invoice_fk")
+
+  @@index([invoice_id, created_at], map: "invoice_line_items_invoice_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model invoices {
+  id                     String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id        String                   @db.Uuid
+  subscription_id        String                   @db.Uuid
+  invoice_number         String                   @unique
+  status                 invoice_status           @default(DRAFT)
+  currency               String                   @default("TWD")
+  period_start           DateTime                 @db.Date
+  period_end             DateTime                 @db.Date
+  subtotal_minor         Int                      @default(0)
+  tax_minor              Int                      @default(0)
+  total_minor            Int                      @default(0)
+  amount_paid_minor      Int                      @default(0)
+  issued_at              DateTime?                @db.Timestamptz(6)
+  due_at                 DateTime?                @db.Timestamptz(6)
+  paid_at                DateTime?                @db.Timestamptz(6)
+  voided_at              DateTime?                @db.Timestamptz(6)
+  created_at             DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime                 @default(now()) @db.Timestamptz(6)
+  invoice_line_items     invoice_line_items[]
+  organizations          organizations            @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  subscriptions          subscriptions            @relation(fields: [subscription_id], references: [id], onUpdate: NoAction)
+  manual_payment_records manual_payment_records[]
+
+  @@unique([organization_id, id], map: "invoices_org_id_unique")
+  @@index([organization_id, status, created_at(sort: Desc)], map: "invoices_org_status_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model line_link_sessions {
+  id              String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String                @db.Uuid
+  customer_id     String                @db.Uuid
+  token_hash      String                @unique
+  status          public_session_status @default(ACTIVE)
+  expires_at      DateTime              @db.Timestamptz(6)
+  consumed_at     DateTime?             @db.Timestamptz(6)
+  created_at      DateTime              @default(now()) @db.Timestamptz(6)
+  customers       customers             @relation(fields: [organization_id, customer_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "line_link_sessions_customer_fk")
+  organizations   organizations         @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model line_webhook_events {
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_hash         String         @unique
+  organization_id    String?        @db.Uuid
+  event_type         String
+  event_timestamp    DateTime       @db.Timestamptz(6)
+  signature_verified Boolean
+  processed_at       DateTime?      @db.Timestamptz(6)
+  outcome            String?
+  error_code         String?
+  created_at         DateTime       @default(now()) @db.Timestamptz(6)
+  organizations      organizations? @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([event_timestamp(sort: Desc)], map: "line_webhook_events_timestamp_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model location_booking_policies {
+  id                            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id               String    @db.Uuid
+  location_id                   String    @unique @db.Uuid
+  slot_interval_minutes         Int       @default(15)
+  minimum_lead_minutes          Int       @default(60)
+  maximum_advance_days          Int       @default(60)
+  hold_minutes                  Int       @default(10)
+  customer_cancellation_enabled Boolean   @default(true)
+  customer_reschedule_enabled   Boolean   @default(true)
+  cancellation_cutoff_hours     Int       @default(24)
+  reminder_hours                Int[]     @default([24, 3])
+  deposits_enabled              Boolean   @default(false)
+  created_at                    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime  @default(now()) @db.Timestamptz(6)
+  locations                     locations @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "location_booking_policies_location_fk")
+
+  @@unique([organization_id, location_id], map: "location_booking_policies_org_location_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model location_business_hours {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String    @db.Uuid
+  location_id     String    @db.Uuid
+  day_of_week     Int       @db.SmallInt
+  segment_index   Int       @default(0) @db.SmallInt
+  opens_at        DateTime  @db.Time(6)
+  closes_at       DateTime  @db.Time(6)
+  is_closed       Boolean   @default(false)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @default(now()) @db.Timestamptz(6)
+  locations       locations @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "location_business_hours_location_fk")
+
+  @@unique([location_id, day_of_week, segment_index], map: "location_business_hours_unique")
+  @@index([organization_id, location_id, day_of_week], map: "location_business_hours_scope_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model location_day_schedules {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String        @db.Uuid
+  location_id     String        @db.Uuid
+  schedule_date   DateTime      @db.Date
+  segment_index   Int           @default(0) @db.SmallInt
+  opens_at        DateTime?     @db.Time(6)
+  closes_at       DateTime?     @db.Time(6)
+  is_closed       Boolean       @default(false)
+  reason          String        @default("")
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime      @default(now()) @db.Timestamptz(6)
+  locations       locations     @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "location_day_schedules_location_fk")
+  organizations   organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([location_id, schedule_date, segment_index], map: "location_day_schedules_unique")
+  @@index([organization_id, location_id, schedule_date], map: "location_day_schedules_scope_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model location_memberships {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String            @db.Uuid
+  location_id     String            @db.Uuid
+  profile_id      String            @db.Uuid
+  role            user_role
+  status          membership_status @default(INVITED)
+  invited_at      DateTime?         @db.Timestamptz(6)
+  joined_at       DateTime?         @db.Timestamptz(6)
+  disabled_at     DateTime?         @db.Timestamptz(6)
+  created_at      DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime          @default(now()) @db.Timestamptz(6)
+  locations       locations         @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "location_membership_location_fk")
+  profiles        profiles          @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([location_id, profile_id, role], map: "location_memberships_unique")
+  @@index([organization_id, location_id, role, status], map: "location_memberships_org_location_role_idx")
+  @@index([profile_id, status, location_id], map: "location_memberships_profile_active_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model location_services {
+  id                           String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id              String                      @db.Uuid
+  location_id                  String                      @db.Uuid
+  service_id                   String                      @db.Uuid
+  service_variant_id           String                      @db.Uuid
+  required_skills              String[]                    @default([])
+  price_override_minor         Int?
+  duration_override_minutes    Int?
+  deposit_fixed_override_minor Int?
+  deposit_percentage_override  Decimal?                    @db.Decimal(5, 2)
+  online_booking_enabled       Boolean                     @default(true)
+  is_active                    Boolean                     @default(true)
+  sort_order                   Int                         @default(0)
+  created_at                   DateTime                    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime                    @default(now()) @db.Timestamptz(6)
+  locations                    locations                   @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "location_services_location_fk")
+  services                     services                    @relation(fields: [organization_id, service_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "location_services_service_fk")
+  service_variants             service_variants            @relation(fields: [organization_id, service_variant_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "location_services_variant_fk")
+  service_staff_assignments    service_staff_assignments[]
+
+  @@unique([organization_id, id], map: "location_services_org_id_unique")
+  @@unique([location_id, service_variant_id], map: "location_services_unique")
+  @@index([organization_id, location_id, is_active, online_booking_enabled, sort_order], map: "location_services_catalog_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model locations {
+  id                           String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id              String                         @db.Uuid
+  name                         String
+  slug                         String
+  code                         String
+  description                  String                         @default("")
+  address                      String                         @default("")
+  phone                        String                         @default("")
+  timezone                     String                         @default("Asia/Taipei")
+  currency                     String                         @default("TWD")
+  booking_state                location_booking_state         @default(CLOSED)
+  online_booking_enabled       Boolean                        @default(false)
+  is_active                    Boolean                        @default(true)
+  logo_path                    String?
+  cover_image_path             String?
+  created_at                   DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime                       @default(now()) @db.Timestamptz(6)
+  disabled_at                  DateTime?                      @db.Timestamptz(6)
+  audit_logs                   audit_logs[]
+  booking_events               booking_events[]
+  booking_holds                booking_holds[]
+  booking_payment_proofs       booking_payment_proofs[]
+  booking_payments             booking_payments[]
+  booking_resource_allocations booking_resource_allocations[]
+  booking_segments             booking_segments[]
+  booking_staff_allocations    booking_staff_allocations[]
+  bookings                     bookings[]
+  cancellation_policies        cancellation_policies[]
+  customer_media               customer_media[]
+  daily_location_summaries     daily_location_summaries[]
+  daily_service_summaries      daily_service_summaries[]
+  daily_staff_summaries        daily_staff_summaries[]
+  deposit_policies             deposit_policies[]
+  location_booking_policies    location_booking_policies?
+  location_business_hours      location_business_hours[]
+  location_day_schedules       location_day_schedules[]
+  location_memberships         location_memberships[]
+  location_services            location_services[]
+  organizations                organizations                  @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  notification_outbox          notification_outbox[]
+  operational_alerts           operational_alerts[]
+  operational_events           operational_events[]
+  organization_invitations     organization_invitations[]
+  public_booking_attempts      public_booking_attempts[]
+  public_booking_sessions      public_booking_sessions[]
+  public_rate_limit_buckets    public_rate_limit_buckets[]
+  resources                    resources[]
+  staff_availability_rules     staff_availability_rules[]
+  staff_location_assignments   staff_location_assignments[]
+  staff_schedule_exceptions    staff_schedule_exceptions[]
+  staff_time_off               staff_time_off[]
+  usage_events                 usage_events[]
+
+  @@unique([organization_id, code], map: "locations_org_code_unique")
+  @@unique([organization_id, id], map: "locations_org_id_unique")
+  @@unique([organization_id, slug], map: "locations_org_slug_unique")
+  @@index([organization_id, is_active, booking_state], map: "locations_org_active_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model manual_payment_records {
+  id                                                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                        String                @db.Uuid
+  invoice_id                                             String                @db.Uuid
+  status                                                 manual_payment_status @default(PENDING)
+  amount_minor                                           Int
+  currency                                               String                @default("TWD")
+  reference                                              String?
+  note                                                   String?
+  recorded_by                                            String                @db.Uuid
+  confirmed_by                                           String?               @db.Uuid
+  confirmed_at                                           DateTime?             @db.Timestamptz(6)
+  rejected_at                                            DateTime?             @db.Timestamptz(6)
+  reversed_at                                            DateTime?             @db.Timestamptz(6)
+  created_at                                             DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at                                             DateTime              @default(now()) @db.Timestamptz(6)
+  profiles_manual_payment_records_confirmed_byToprofiles profiles?             @relation("manual_payment_records_confirmed_byToprofiles", fields: [confirmed_by], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  invoices                                               invoices              @relation(fields: [organization_id, invoice_id], references: [organization_id, id], onUpdate: NoAction, map: "manual_payment_records_invoice_fk")
+  profiles_manual_payment_records_recorded_byToprofiles  profiles              @relation("manual_payment_records_recorded_byToprofiles", fields: [recorded_by], references: [id], onUpdate: NoAction)
+
+  @@index([invoice_id, status, created_at(sort: Desc)], map: "manual_payment_records_invoice_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model merchant_application_events {
+  id                    String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  application_id        String                       @db.Uuid
+  previous_status       merchant_application_status?
+  new_status            merchant_application_status
+  actor_profile_id      String?                      @db.Uuid
+  reason                String?
+  metadata              Json                         @default("{}")
+  created_at            DateTime                     @default(now()) @db.Timestamptz(6)
+  profiles              profiles?                    @relation(fields: [actor_profile_id], references: [id], onUpdate: NoAction)
+  merchant_applications merchant_applications        @relation(fields: [application_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([application_id, created_at], map: "merchant_application_events_application_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model merchant_applications {
+  id                                                            String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicant_profile_id                                          String                        @db.Uuid
+  status                                                        merchant_application_status   @default(DRAFT)
+  business_name                                                 String                        @default("")
+  contact_name                                                  String                        @default("")
+  contact_email                                                 String                        @default("")
+  contact_phone                                                 String                        @default("")
+  industry_type                                                 String                        @default("BEAUTY")
+  desired_slug                                                  String?
+  initial_location_name                                         String                        @default("")
+  initial_location_address                                      String                        @default("")
+  submitted_at                                                  DateTime?                     @db.Timestamptz(6)
+  review_started_at                                             DateTime?                     @db.Timestamptz(6)
+  reviewed_at                                                   DateTime?                     @db.Timestamptz(6)
+  reviewer_profile_id                                           String?                       @db.Uuid
+  approved_organization_id                                      String?                       @db.Uuid
+  applicant_note                                                String?
+  internal_note                                                 String?
+  rejection_reason                                              String?
+  expires_at                                                    DateTime?                     @db.Timestamptz(6)
+  version                                                       Int                           @default(1)
+  created_at                                                    DateTime                      @default(now()) @db.Timestamptz(6)
+  updated_at                                                    DateTime                      @default(now()) @db.Timestamptz(6)
+  merchant_application_events                                   merchant_application_events[]
+  profiles_merchant_applications_applicant_profile_idToprofiles profiles                      @relation("merchant_applications_applicant_profile_idToprofiles", fields: [applicant_profile_id], references: [id], onUpdate: NoAction)
+  organizations                                                 organizations?                @relation(fields: [approved_organization_id], references: [id], onUpdate: NoAction)
+  profiles_merchant_applications_reviewer_profile_idToprofiles  profiles?                     @relation("merchant_applications_reviewer_profile_idToprofiles", fields: [reviewer_profile_id], references: [id], onUpdate: NoAction)
+
+  @@index([applicant_profile_id, created_at(sort: Desc)], map: "merchant_applications_applicant_idx")
+  @@index([status, submitted_at, created_at], map: "merchant_applications_status_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model merchant_setup_progress {
+  id                          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id             String        @unique @db.Uuid
+  brand_completed_at          DateTime?     @db.Timestamptz(6)
+  location_completed_at       DateTime?     @db.Timestamptz(6)
+  business_hours_completed_at DateTime?     @db.Timestamptz(6)
+  service_completed_at        DateTime?     @db.Timestamptz(6)
+  staff_completed_at          DateTime?     @db.Timestamptz(6)
+  resource_completed_at       DateTime?     @db.Timestamptz(6)
+  policies_completed_at       DateTime?     @db.Timestamptz(6)
+  notifications_completed_at  DateTime?     @db.Timestamptz(6)
+  test_booking_id             String?       @db.Uuid
+  test_booking_completed_at   DateTime?     @db.Timestamptz(6)
+  go_live_at                  DateTime?     @db.Timestamptz(6)
+  last_step                   String?
+  created_at                  DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime      @default(now()) @db.Timestamptz(6)
+  organizations               organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  bookings                    bookings?     @relation(fields: [organization_id, test_booking_id], references: [organization_id, id], onUpdate: NoAction, map: "merchant_setup_progress_test_booking_fk")
+
+  @@unique([organization_id, test_booking_id], map: "merchant_setup_progress_test_booking_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model notification_deliveries {
+  id                  String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id     String                       @db.Uuid
+  notification_job_id String                       @db.Uuid
+  channel             notification_channel
+  status              notification_delivery_status @default(PENDING)
+  attempt_number      Int
+  provider_message_id String?
+  error_code          String?
+  response_metadata   Json                         @default("{}")
+  started_at          DateTime                     @default(now()) @db.Timestamptz(6)
+  delivered_at        DateTime?                    @db.Timestamptz(6)
+  created_at          DateTime                     @default(now()) @db.Timestamptz(6)
+  notification_jobs   notification_jobs            @relation(fields: [organization_id, notification_job_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "notification_deliveries_job_fk")
+
+  @@unique([notification_job_id, attempt_number], map: "notification_deliveries_unique")
+  @@index([organization_id, status, created_at(sort: Desc)], map: "notification_deliveries_org_status_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model notification_integrations {
+  id               String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String                          @db.Uuid
+  channel          notification_channel
+  status           notification_integration_status @default(DISABLED)
+  secret_reference String?
+  sender_reference String?
+  configuration    Json                            @default("{}")
+  last_verified_at DateTime?                       @db.Timestamptz(6)
+  last_error_code  String?
+  created_at       DateTime                        @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime                        @default(now()) @db.Timestamptz(6)
+  organizations    organizations                   @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([organization_id, channel], map: "notification_integrations_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model notification_jobs {
+  id                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id         String                    @db.Uuid
+  outbox_id               String                    @db.Uuid
+  channel                 notification_channel
+  status                  notification_job_status   @default(PENDING)
+  scheduled_at            DateTime                  @default(now()) @db.Timestamptz(6)
+  attempt_count           Int                       @default(0)
+  max_attempts            Int                       @default(5)
+  next_attempt_at         DateTime                  @default(now()) @db.Timestamptz(6)
+  locked_at               DateTime?                 @db.Timestamptz(6)
+  locked_by               String?
+  last_error_code         String?
+  completed_at            DateTime?                 @db.Timestamptz(6)
+  created_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  notification_deliveries notification_deliveries[]
+  notification_outbox     notification_outbox       @relation(fields: [organization_id, outbox_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "notification_jobs_outbox_fk")
+
+  @@unique([organization_id, id], map: "notification_jobs_org_id_unique")
+  @@unique([outbox_id, channel], map: "notification_jobs_unique")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model notification_outbox {
+  id                String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id   String                  @db.Uuid
+  location_id       String?                 @db.Uuid
+  booking_id        String?                 @db.Uuid
+  customer_id       String?                 @db.Uuid
+  event_type        notification_event_type
+  payload           Json
+  idempotency_key   String
+  available_at      DateTime                @default(now()) @db.Timestamptz(6)
+  dispatched_at     DateTime?               @db.Timestamptz(6)
+  created_at        DateTime                @default(now()) @db.Timestamptz(6)
+  notification_jobs notification_jobs[]
+  bookings          bookings?               @relation(fields: [organization_id, booking_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "notification_outbox_booking_fk")
+  customers         customers?              @relation(fields: [organization_id, customer_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "notification_outbox_customer_fk")
+  locations         locations?              @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "notification_outbox_location_fk")
+  organizations     organizations           @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "notification_outbox_organization_fk")
+
+  @@unique([organization_id, id], map: "notification_outbox_org_id_unique")
+  @@unique([organization_id, idempotency_key], map: "notification_outbox_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model notification_templates {
+  id               String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String?                 @db.Uuid
+  event_type       notification_event_type
+  channel          notification_channel
+  locale           String                  @default("zh-Hant-TW")
+  subject_template String?
+  body_template    String
+  is_transactional Boolean                 @default(true)
+  version          Int                     @default(1)
+  is_active        Boolean                 @default(true)
+  created_at       DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime                @default(now()) @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model operational_alerts {
+  id                                                    String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                       String                     @db.Uuid
+  location_id                                           String?                    @db.Uuid
+  alert_type                                            String
+  severity                                              operational_alert_severity
+  status                                                operational_alert_status   @default(ACTIVE)
+  message                                               String
+  target_type                                           String?
+  target_id                                             String?
+  detected_at                                           DateTime                   @default(now()) @db.Timestamptz(6)
+  acknowledged_by                                       String?                    @db.Uuid
+  acknowledged_at                                       DateTime?                  @db.Timestamptz(6)
+  resolved_by                                           String?                    @db.Uuid
+  resolved_at                                           DateTime?                  @db.Timestamptz(6)
+  created_at                                            DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at                                            DateTime                   @default(now()) @db.Timestamptz(6)
+  profiles_operational_alerts_acknowledged_byToprofiles profiles?                  @relation("operational_alerts_acknowledged_byToprofiles", fields: [acknowledged_by], references: [id], onUpdate: NoAction)
+  locations                                             locations?                 @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "operational_alerts_location_fk")
+  organizations                                         organizations              @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "operational_alerts_organization_fk")
+  profiles_operational_alerts_resolved_byToprofiles     profiles?                  @relation("operational_alerts_resolved_byToprofiles", fields: [resolved_by], references: [id], onUpdate: NoAction)
+
+  @@index([organization_id, location_id, status, detected_at(sort: Desc)], map: "operational_alerts_active_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model operational_events {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String        @db.Uuid
+  location_id     String?       @db.Uuid
+  event_type      String
+  target_type     String
+  target_id       String
+  payload         Json          @default("{}")
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  locations       locations?    @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "operational_events_location_fk")
+  organizations   organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "operational_events_organization_fk")
+
+  @@index([location_id, created_at(sort: Desc)], map: "operational_events_location_created_idx")
+  @@index([organization_id, created_at(sort: Desc)], map: "operational_events_org_created_idx")
+  @@index([target_type, target_id, created_at(sort: Desc)], map: "operational_events_target_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model organization_feature_overrides {
+  id                                                           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                              String                @db.Uuid
+  feature_key                                                  feature_key
+  override_type                                                feature_override_type
+  limit_value                                                  Int?
+  reason                                                       String
+  effective_at                                                 DateTime              @default(now()) @db.Timestamptz(6)
+  expires_at                                                   DateTime?             @db.Timestamptz(6)
+  created_by                                                   String                @db.Uuid
+  created_at                                                   DateTime              @default(now()) @db.Timestamptz(6)
+  revoked_at                                                   DateTime?             @db.Timestamptz(6)
+  revoked_by                                                   String?               @db.Uuid
+  profiles_organization_feature_overrides_created_byToprofiles profiles              @relation("organization_feature_overrides_created_byToprofiles", fields: [created_by], references: [id], onUpdate: NoAction)
+  organizations                                                organizations         @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles_organization_feature_overrides_revoked_byToprofiles profiles?             @relation("organization_feature_overrides_revoked_byToprofiles", fields: [revoked_by], references: [id], onDelete: Restrict, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model organization_invitations {
+  id                                                      String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                         String        @db.Uuid
+  location_id                                             String?       @db.Uuid
+  email                                                   String
+  role                                                    user_role
+  token_hash                                              String        @unique
+  expires_at                                              DateTime      @db.Timestamptz(6)
+  invited_by                                              String        @db.Uuid
+  accepted_by                                             String?       @db.Uuid
+  accepted_at                                             DateTime?     @db.Timestamptz(6)
+  revoked_at                                              DateTime?     @db.Timestamptz(6)
+  created_at                                              DateTime      @default(now()) @db.Timestamptz(6)
+  profiles_organization_invitations_accepted_byToprofiles profiles?     @relation("organization_invitations_accepted_byToprofiles", fields: [accepted_by], references: [id], onUpdate: NoAction)
+  profiles_organization_invitations_invited_byToprofiles  profiles      @relation("organization_invitations_invited_byToprofiles", fields: [invited_by], references: [id], onUpdate: NoAction)
+  locations                                               locations?    @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "organization_invitations_location_fk")
+  organizations                                           organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model organization_memberships {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String            @db.Uuid
+  profile_id       String            @db.Uuid
+  role             user_role
+  status           membership_status @default(INVITED)
+  all_locations    Boolean           @default(true)
+  is_primary_owner Boolean           @default(false)
+  invited_at       DateTime?         @db.Timestamptz(6)
+  joined_at        DateTime?         @db.Timestamptz(6)
+  disabled_at      DateTime?         @db.Timestamptz(6)
+  created_at       DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime          @default(now()) @db.Timestamptz(6)
+  organizations    organizations     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles         profiles          @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([organization_id, profile_id, role], map: "organization_memberships_unique")
+  @@index([organization_id, role, status], map: "organization_memberships_org_role_idx")
+  @@index([profile_id, status, organization_id], map: "organization_memberships_profile_active_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model organizations {
+  id                             String                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                           String
+  slug                           String                           @unique
+  business_name                  String
+  entity_type                    organization_entity_type         @default(SOLE_PROPRIETOR)
+  brand_description              String                           @default("")
+  brand_logo_path                String?
+  brand_cover_image_path         String?
+  email                          String
+  phone                          String
+  status                         organization_status              @default(TRIALING)
+  default_timezone               String                           @default("Asia/Taipei")
+  default_currency               String                           @default("TWD")
+  default_locale                 String                           @default("zh-Hant-TW")
+  trial_ends_at                  DateTime?                        @db.Timestamptz(6)
+  public_profile_enabled         Boolean                          @default(false)
+  is_test                        Boolean                          @default(false)
+  created_at                     DateTime                         @default(now()) @db.Timestamptz(6)
+  updated_at                     DateTime                         @default(now()) @db.Timestamptz(6)
+  disabled_at                    DateTime?                        @db.Timestamptz(6)
+  audit_logs                     audit_logs[]
+  billing_notifications          billing_notifications[]
+  billing_usage_summaries        billing_usage_summaries[]
+  customer_tags                  customer_tags[]
+  customers                      customers[]
+  invoices                       invoices[]
+  line_link_sessions             line_link_sessions[]
+  line_webhook_events            line_webhook_events[]
+  locations                      locations[]
+  location_day_schedules         location_day_schedules[]
+  merchant_applications          merchant_applications[]
+  merchant_setup_progress        merchant_setup_progress?
+  notification_integrations      notification_integrations[]
+  notification_outbox            notification_outbox[]
+  operational_alerts             operational_alerts[]
+  operational_events             operational_events[]
+  organization_feature_overrides organization_feature_overrides[]
+  organization_invitations       organization_invitations[]
+  organization_memberships       organization_memberships[]
+  report_schedules               report_schedules[]
+  resource_types                 resource_types[]
+  service_categories             service_categories[]
+  services                       services[]
+  staff_profiles                 staff_profiles[]
+  subscriptions                  subscriptions[]
+  usage_events                   usage_events[]
+
+  @@index([status, created_at(sort: Desc)], map: "organizations_status_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model plan_entitlements {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  plan_version_id String        @db.Uuid
+  feature_key     feature_key
+  is_enabled      Boolean       @default(false)
+  limit_value     Int?
+  soft_limit      Boolean       @default(false)
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  plan_versions   plan_versions @relation(fields: [plan_version_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([plan_version_id, feature_key], map: "plan_entitlements_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model plan_versions {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  plan_id             String              @db.Uuid
+  version             Int
+  monthly_price_minor Int                 @default(0)
+  currency            String              @default("TWD")
+  trial_days          Int                 @default(14)
+  effective_at        DateTime            @default(now()) @db.Timestamptz(6)
+  retired_at          DateTime?           @db.Timestamptz(6)
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  plan_entitlements   plan_entitlements[]
+  plans               plans               @relation(fields: [plan_id], references: [id], onUpdate: NoAction)
+  subscriptions       subscriptions[]
+
+  @@unique([plan_id, version], map: "plan_versions_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model plans {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code          String          @unique
+  display_name  String
+  is_active     Boolean         @default(true)
+  created_at    DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime        @default(now()) @db.Timestamptz(6)
+  plan_versions plan_versions[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model profiles {
+  id                                                                                 String                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  auth_user_id                                                                       String?                          @unique @db.Uuid
+  email                                                                              String
+  password_hash                                                                      String?
+  display_name                                                                       String
+  avatar_path                                                                        String?
+  platform_role                                                                      user_role?
+  is_active                                                                          Boolean                          @default(true)
+  last_login_at                                                                      DateTime?                        @db.Timestamptz(6)
+  created_at                                                                         DateTime                         @default(now()) @db.Timestamptz(6)
+  updated_at                                                                         DateTime                         @default(now()) @db.Timestamptz(6)
+  audit_logs                                                                         audit_logs[]
+  auth_sessions                                                                      auth_sessions[]
+  booking_events                                                                     booking_events[]
+  booking_payment_proofs                                                             booking_payment_proofs[]
+  booking_payments_booking_payments_confirmed_byToprofiles                           booking_payments[]               @relation("booking_payments_confirmed_byToprofiles")
+  booking_payments_booking_payments_recorded_byToprofiles                            booking_payments[]               @relation("booking_payments_recorded_byToprofiles")
+  booking_refunds_booking_refunds_confirmed_byToprofiles                             booking_refunds[]                @relation("booking_refunds_confirmed_byToprofiles")
+  booking_refunds_booking_refunds_recorded_byToprofiles                              booking_refunds[]                @relation("booking_refunds_recorded_byToprofiles")
+  bookings_bookings_created_byToprofiles                                             bookings[]                       @relation("bookings_created_byToprofiles")
+  bookings_bookings_updated_byToprofiles                                             bookings[]                       @relation("bookings_updated_byToprofiles")
+  customer_consents                                                                  customer_consents[]
+  customer_media                                                                     customer_media[]
+  customer_merge_events                                                              customer_merge_events[]
+  customer_notes_customer_notes_created_byToprofiles                                 customer_notes[]                 @relation("customer_notes_created_byToprofiles")
+  customer_notes_customer_notes_updated_byToprofiles                                 customer_notes[]                 @relation("customer_notes_updated_byToprofiles")
+  customer_tag_assignments                                                           customer_tag_assignments[]
+  location_memberships                                                               location_memberships[]
+  manual_payment_records_manual_payment_records_confirmed_byToprofiles               manual_payment_records[]         @relation("manual_payment_records_confirmed_byToprofiles")
+  manual_payment_records_manual_payment_records_recorded_byToprofiles                manual_payment_records[]         @relation("manual_payment_records_recorded_byToprofiles")
+  merchant_application_events                                                        merchant_application_events[]
+  merchant_applications_merchant_applications_applicant_profile_idToprofiles         merchant_applications[]          @relation("merchant_applications_applicant_profile_idToprofiles")
+  merchant_applications_merchant_applications_reviewer_profile_idToprofiles          merchant_applications[]          @relation("merchant_applications_reviewer_profile_idToprofiles")
+  operational_alerts_operational_alerts_acknowledged_byToprofiles                    operational_alerts[]             @relation("operational_alerts_acknowledged_byToprofiles")
+  operational_alerts_operational_alerts_resolved_byToprofiles                        operational_alerts[]             @relation("operational_alerts_resolved_byToprofiles")
+  organization_feature_overrides_organization_feature_overrides_created_byToprofiles organization_feature_overrides[] @relation("organization_feature_overrides_created_byToprofiles")
+  organization_feature_overrides_organization_feature_overrides_revoked_byToprofiles organization_feature_overrides[] @relation("organization_feature_overrides_revoked_byToprofiles")
+  organization_invitations_organization_invitations_accepted_byToprofiles            organization_invitations[]       @relation("organization_invitations_accepted_byToprofiles")
+  organization_invitations_organization_invitations_invited_byToprofiles             organization_invitations[]       @relation("organization_invitations_invited_byToprofiles")
+  organization_memberships                                                           organization_memberships[]
+  report_schedules_report_schedules_created_byToprofiles                             report_schedules[]               @relation("report_schedules_created_byToprofiles")
+  report_schedules_report_schedules_updated_byToprofiles                             report_schedules[]               @relation("report_schedules_updated_byToprofiles")
+  staff_profiles                                                                     staff_profiles[]
+  staff_time_off                                                                     staff_time_off[]
+
+  @@index([is_active, created_at], map: "profiles_active_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model public_booking_attempts {
+  id                        String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id           String?                  @db.Uuid
+  location_id               String?                  @db.Uuid
+  public_booking_session_id String?                  @db.Uuid
+  request_id                String
+  event_type                String
+  outcome                   public_attempt_outcome
+  reason_code               String
+  ip_hash                   String?
+  device_hash               String?
+  behavior_hash             String?
+  session_token_hash        String?
+  idempotency_hash          String?
+  created_at                DateTime                 @default(now()) @db.Timestamptz(6)
+  locations                 locations?               @relation(fields: [organization_id, location_id], references: [organization_id, id], onUpdate: NoAction, map: "public_booking_attempts_location_fk")
+  public_booking_sessions   public_booking_sessions? @relation(fields: [organization_id, public_booking_session_id], references: [organization_id, id], onUpdate: NoAction, map: "public_booking_attempts_session_fk")
+
+  @@index([device_hash, created_at(sort: Desc)], map: "public_booking_attempts_device_idx")
+  @@index([ip_hash, created_at(sort: Desc)], map: "public_booking_attempts_ip_idx")
+  @@index([organization_id, location_id, created_at(sort: Desc)], map: "public_booking_attempts_location_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model public_booking_sessions {
+  id                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id         String                    @db.Uuid
+  location_id             String                    @db.Uuid
+  token_hash              String                    @unique
+  status                  public_session_status     @default(ACTIVE)
+  expires_at              DateTime                  @db.Timestamptz(6)
+  consumed_at             DateTime?                 @db.Timestamptz(6)
+  revoked_at              DateTime?                 @db.Timestamptz(6)
+  ip_hash                 String?
+  device_hash             String?
+  behavior_hash           String?
+  allowed_origin          String
+  created_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  booking_holds           booking_holds[]
+  public_booking_attempts public_booking_attempts[]
+  locations               locations                 @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "public_booking_sessions_location_fk")
+
+  @@unique([organization_id, id], map: "public_booking_sessions_org_id_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model public_rate_limit_buckets {
+  id              String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String?    @db.Uuid
+  location_id     String?    @db.Uuid
+  dimension_type  String
+  dimension_hash  String
+  window_start    DateTime   @db.Timestamptz(6)
+  count           Int        @default(0)
+  expires_at      DateTime   @db.Timestamptz(6)
+  updated_at      DateTime   @default(now()) @db.Timestamptz(6)
+  locations       locations? @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "public_rate_limit_buckets_location_fk")
+
+  @@unique([location_id, dimension_type, dimension_hash, window_start], map: "public_rate_limit_buckets_unique")
+  @@index([expires_at], map: "public_rate_limit_buckets_expiry_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model rate_limit_buckets {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scope           String
+  identifier_hash String
+  window_start    DateTime @db.Timestamptz(6)
+  count           Int      @default(0)
+  expires_at      DateTime @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([scope, identifier_hash, window_start], map: "rate_limit_buckets_unique")
+  @@index([expires_at], map: "rate_limit_buckets_expiry_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model report_schedules {
+  id                                             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                String               @db.Uuid
+  name                                           String
+  report_type                                    report_schedule_type
+  location_ids                                   String[]             @default([]) @db.Uuid
+  recipients                                     String[]
+  timezone                                       String               @default("Asia/Taipei")
+  send_hour                                      Int                  @default(8) @db.SmallInt
+  send_minute                                    Int                  @default(0) @db.SmallInt
+  day_of_week                                    Int?                 @db.SmallInt
+  is_enabled                                     Boolean              @default(true)
+  next_run_at                                    DateTime             @db.Timestamptz(6)
+  last_run_at                                    DateTime?            @db.Timestamptz(6)
+  archived_at                                    DateTime?            @db.Timestamptz(6)
+  created_by                                     String               @db.Uuid
+  updated_by                                     String               @db.Uuid
+  created_at                                     DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at                                     DateTime             @default(now()) @db.Timestamptz(6)
+  profiles_report_schedules_created_byToprofiles profiles             @relation("report_schedules_created_byToprofiles", fields: [created_by], references: [id], onUpdate: NoAction)
+  organizations                                  organizations        @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles_report_schedules_updated_byToprofiles profiles             @relation("report_schedules_updated_byToprofiles", fields: [updated_by], references: [id], onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model resource_availability_rules {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String    @db.Uuid
+  resource_id     String    @db.Uuid
+  day_of_week     Int       @db.SmallInt
+  segment_index   Int       @default(0) @db.SmallInt
+  starts_at       DateTime  @db.Time(6)
+  ends_at         DateTime  @db.Time(6)
+  is_active       Boolean   @default(true)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @default(now()) @db.Timestamptz(6)
+  resources       resources @relation(fields: [organization_id, resource_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "resource_availability_rules_resource_fk")
+
+  @@unique([resource_id, day_of_week, segment_index], map: "resource_availability_rules_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model resource_time_off {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String    @db.Uuid
+  resource_id     String    @db.Uuid
+  starts_at       DateTime  @db.Timestamptz(6)
+  ends_at         DateTime  @db.Timestamptz(6)
+  reason          String?
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @default(now()) @db.Timestamptz(6)
+  resources       resources @relation(fields: [organization_id, resource_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "resource_time_off_resource_fk")
+
+  @@index([organization_id, resource_id, starts_at, ends_at], map: "resource_time_off_lookup_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model resource_types {
+  id                            String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id               String                          @db.Uuid
+  name                          String
+  kind                          resource_kind
+  description                   String                          @default("")
+  is_active                     Boolean                         @default(true)
+  created_at                    DateTime                        @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime                        @default(now()) @db.Timestamptz(6)
+  organizations                 organizations                   @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  resources                     resources[]
+  service_resource_requirements service_resource_requirements[]
+
+  @@unique([organization_id, id], map: "resource_types_org_id_unique")
+  @@unique([organization_id, name], map: "resource_types_org_name_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model resources {
+  id                           String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id              String                         @db.Uuid
+  location_id                  String                         @db.Uuid
+  resource_type_id             String                         @db.Uuid
+  name                         String
+  description                  String                         @default("")
+  is_active                    Boolean                        @default(true)
+  sort_order                   Int                            @default(0)
+  created_at                   DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime                       @default(now()) @db.Timestamptz(6)
+  disabled_at                  DateTime?                      @db.Timestamptz(6)
+  booking_resource_allocations booking_resource_allocations[]
+  resource_availability_rules  resource_availability_rules[]
+  resource_time_off            resource_time_off[]
+  locations                    locations                      @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "resources_location_fk")
+  resource_types               resource_types                 @relation(fields: [organization_id, resource_type_id], references: [organization_id, id], onUpdate: NoAction, map: "resources_type_fk")
+
+  @@unique([location_id, name], map: "resources_location_name_unique")
+  @@unique([organization_id, id], map: "resources_org_id_unique")
+  @@index([organization_id, location_id, is_active, resource_type_id], map: "resources_location_active_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model service_addons {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id        String   @db.Uuid
+  service_id             String   @db.Uuid
+  name                   String
+  duration_delta_minutes Int      @default(0)
+  price_delta_minor      Int      @default(0)
+  online_booking_enabled Boolean  @default(true)
+  is_active              Boolean  @default(true)
+  sort_order             Int      @default(0)
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime @default(now()) @db.Timestamptz(6)
+  services               services @relation(fields: [organization_id, service_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "service_addons_service_fk")
+
+  @@unique([organization_id, id], map: "service_addons_org_id_unique")
+  @@unique([service_id, name], map: "service_addons_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model service_categories {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String        @db.Uuid
+  name            String
+  description     String        @default("")
+  sort_order      Int           @default(0)
+  is_active       Boolean       @default(true)
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime      @default(now()) @db.Timestamptz(6)
+  organizations   organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  services        services[]
+
+  @@unique([organization_id, id], map: "service_categories_org_id_unique")
+  @@unique([organization_id, name], map: "service_categories_org_name_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model service_resource_requirements {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id    String           @db.Uuid
+  service_variant_id String           @db.Uuid
+  resource_type_id   String           @db.Uuid
+  quantity           Int              @default(1)
+  is_required        Boolean          @default(true)
+  created_at         DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime         @default(now()) @db.Timestamptz(6)
+  resource_types     resource_types   @relation(fields: [organization_id, resource_type_id], references: [organization_id, id], onUpdate: NoAction, map: "service_resource_requirements_type_fk")
+  service_variants   service_variants @relation(fields: [organization_id, service_variant_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "service_resource_requirements_variant_fk")
+
+  @@unique([service_variant_id, resource_type_id], map: "service_resource_requirements_unique")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model service_staff_assignments {
+  id                     String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id        String            @db.Uuid
+  location_service_id    String            @db.Uuid
+  staff_profile_id       String            @db.Uuid
+  online_booking_enabled Boolean           @default(true)
+  walk_in_eligible        Boolean           @default(true)
+  effective_from          DateTime          @default(dbgenerated("'2000-01-01T00:00:00Z'::timestamptz")) @db.Timestamptz(6)
+  effective_until         DateTime?         @db.Timestamptz(6)
+  is_active              Boolean           @default(true)
+  created_at             DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime          @default(now()) @db.Timestamptz(6)
+  location_services      location_services @relation(fields: [organization_id, location_service_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "service_staff_assignments_location_service_fk")
+  staff_profiles         staff_profiles    @relation(fields: [organization_id, staff_profile_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "service_staff_assignments_staff_fk")
+
+  @@unique([location_service_id, staff_profile_id], map: "service_staff_assignments_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model service_variants {
+  id                            String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id               String                          @db.Uuid
+  service_id                    String                          @db.Uuid
+  name                          String
+  duration_minutes              Int
+  price_minor                   Int
+  pre_buffer_minutes            Int                             @default(0)
+  post_buffer_minutes           Int                             @default(0)
+  deposit_fixed_minor           Int?
+  deposit_percentage            Decimal?                        @db.Decimal(5, 2)
+  is_default                    Boolean                         @default(false)
+  is_active                     Boolean                         @default(true)
+  created_at                    DateTime                        @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime                        @default(now()) @db.Timestamptz(6)
+  booking_holds                 booking_holds[]
+  booking_segments              booking_segments[]
+  cancellation_policies         cancellation_policies[]
+  daily_service_summaries       daily_service_summaries[]
+  deposit_policies              deposit_policies[]
+  location_services             location_services[]
+  service_resource_requirements service_resource_requirements[]
+  services                      services                        @relation(fields: [organization_id, service_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "service_variants_service_fk")
+  staff_service_assignments     staff_service_assignments[]
+
+  @@unique([organization_id, id], map: "service_variants_org_id_unique")
+  @@unique([service_id, name], map: "service_variants_service_name_unique")
+  @@index([organization_id, service_id, is_active], map: "service_variants_service_active_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model services {
+  id                     String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id        String              @db.Uuid
+  category_id            String?             @db.Uuid
+  name                   String
+  description            String              @default("")
+  booking_notice         String              @default("")
+  image_path             String?
+  online_booking_enabled Boolean             @default(true)
+  is_active              Boolean             @default(true)
+  sort_order             Int                 @default(0)
+  created_at             DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime            @default(now()) @db.Timestamptz(6)
+  booking_segments       booking_segments[]
+  location_services      location_services[]
+  service_addons         service_addons[]
+  service_variants       service_variants[]
+  service_categories     service_categories? @relation(fields: [organization_id, category_id], references: [organization_id, id], onDelete: SetNull, onUpdate: NoAction, map: "services_category_fk")
+  organizations          organizations       @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "services_organization_fk")
+
+  @@unique([organization_id, id], map: "services_org_id_unique")
+  @@unique([organization_id, name], map: "services_org_name_unique")
+  @@index([organization_id, is_active, sort_order], map: "services_org_active_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model staff_availability_rules {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String         @db.Uuid
+  location_id      String         @db.Uuid
+  staff_profile_id String         @db.Uuid
+  day_of_week      Int            @db.SmallInt
+  segment_index    Int            @default(0) @db.SmallInt
+  starts_at        DateTime       @db.Time(6)
+  ends_at          DateTime       @db.Time(6)
+  effective_from   DateTime?      @db.Date
+  effective_until  DateTime?      @db.Date
+  is_active        Boolean        @default(true)
+  created_at       DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime       @default(now()) @db.Timestamptz(6)
+  locations        locations      @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "staff_availability_rules_location_fk")
+  staff_profiles   staff_profiles @relation(fields: [organization_id, staff_profile_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "staff_availability_rules_staff_fk")
+
+  @@unique([location_id, staff_profile_id, day_of_week, segment_index, effective_from], map: "staff_availability_rules_unique")
+  @@index([organization_id, location_id, staff_profile_id, day_of_week, is_active], map: "staff_availability_rules_lookup_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model staff_location_assignments {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String         @db.Uuid
+  staff_profile_id String         @db.Uuid
+  location_id      String         @db.Uuid
+  is_primary       Boolean        @default(false)
+  is_active        Boolean        @default(true)
+  created_at       DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime       @default(now()) @db.Timestamptz(6)
+  locations        locations      @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "staff_location_assignments_location_fk")
+  staff_profiles   staff_profiles @relation(fields: [organization_id, staff_profile_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "staff_location_assignments_staff_fk")
+
+  @@unique([staff_profile_id, location_id], map: "staff_location_assignments_unique")
+  @@index([organization_id, location_id, is_active], map: "staff_location_assignments_location_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model staff_profiles {
+  id                         String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id            String                       @db.Uuid
+  linked_profile_id          String?                      @db.Uuid
+  display_name               String
+  title                      String                       @default("")
+  bio                        String                       @default("")
+  photo_path                 String?
+  skills                     String[]                     @default([])
+  public_visible             Boolean                      @default(true)
+  is_active                  Boolean                      @default(true)
+  sort_order                 Int                          @default(0)
+  created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  disabled_at                DateTime?                    @db.Timestamptz(6)
+  booking_holds              booking_holds[]
+  booking_segments           booking_segments[]
+  booking_staff_allocations  booking_staff_allocations[]
+  customers                  customers[]
+  daily_staff_summaries      daily_staff_summaries[]
+  service_staff_assignments  service_staff_assignments[]
+  staff_availability_rules   staff_availability_rules[]
+  staff_location_assignments staff_location_assignments[]
+  profiles                   profiles?                    @relation(fields: [linked_profile_id], references: [id], onUpdate: NoAction)
+  organizations              organizations                @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  staff_schedule_exceptions  staff_schedule_exceptions[]
+  staff_service_assignments  staff_service_assignments[]
+  staff_time_off             staff_time_off[]
+
+  @@unique([organization_id, id], map: "staff_profiles_org_id_unique")
+  @@index([organization_id, is_active, sort_order], map: "staff_profiles_org_active_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model staff_schedule_exceptions {
+  id               String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String                  @db.Uuid
+  location_id      String                  @db.Uuid
+  staff_profile_id String                  @db.Uuid
+  exception_date   DateTime                @db.Date
+  kind             schedule_exception_kind
+  starts_at        DateTime?               @db.Time(6)
+  ends_at          DateTime?               @db.Time(6)
+  reason           String?
+  created_at       DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime                @default(now()) @db.Timestamptz(6)
+  locations        locations               @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "staff_schedule_exceptions_location_fk")
+  staff_profiles   staff_profiles          @relation(fields: [organization_id, staff_profile_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "staff_schedule_exceptions_staff_fk")
+
+  @@unique([location_id, staff_profile_id, exception_date, kind, starts_at], map: "staff_schedule_exceptions_unique")
+  @@index([organization_id, location_id, staff_profile_id, exception_date], map: "staff_schedule_exceptions_lookup_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model staff_service_assignments {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id    String           @db.Uuid
+  staff_profile_id   String           @db.Uuid
+  service_variant_id String           @db.Uuid
+  is_active          Boolean          @default(true)
+  created_at         DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime         @default(now()) @db.Timestamptz(6)
+  staff_profiles     staff_profiles   @relation(fields: [organization_id, staff_profile_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "staff_service_assignments_staff_fk")
+  service_variants   service_variants @relation(fields: [organization_id, service_variant_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "staff_service_assignments_variant_fk")
+
+  @@unique([staff_profile_id, service_variant_id], map: "staff_service_assignments_unique")
+  @@index([organization_id, service_variant_id, is_active], map: "staff_service_assignments_variant_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model staff_time_off {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String         @db.Uuid
+  location_id      String?        @db.Uuid
+  staff_profile_id String         @db.Uuid
+  starts_at        DateTime       @db.Timestamptz(6)
+  ends_at          DateTime       @db.Timestamptz(6)
+  reason           String?
+  created_by       String?        @db.Uuid
+  created_at       DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime       @default(now()) @db.Timestamptz(6)
+  profiles         profiles?      @relation(fields: [created_by], references: [id], onUpdate: NoAction)
+  locations        locations?     @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "staff_time_off_location_fk")
+  staff_profiles   staff_profiles @relation(fields: [organization_id, staff_profile_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "staff_time_off_staff_fk")
+
+  @@index([organization_id, staff_profile_id, starts_at, ends_at], map: "staff_time_off_lookup_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model subscription_items {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subscription_id  String        @db.Uuid
+  item_code        String
+  quantity         Int           @default(1)
+  unit_price_minor Int           @default(0)
+  metadata         Json          @default("{}")
+  created_at       DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime      @default(now()) @db.Timestamptz(6)
+  subscriptions    subscriptions @relation(fields: [subscription_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([subscription_id, item_code], map: "subscription_items_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model subscriptions {
+  id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id      String               @db.Uuid
+  plan_version_id      String               @db.Uuid
+  status               subscription_status  @default(TRIALING)
+  is_current           Boolean              @default(true)
+  billing_period_start DateTime             @db.Date
+  billing_period_end   DateTime             @db.Date
+  trial_ends_at        DateTime?            @db.Timestamptz(6)
+  cancel_at_period_end Boolean              @default(false)
+  suspended_at         DateTime?            @db.Timestamptz(6)
+  cancelled_at         DateTime?            @db.Timestamptz(6)
+  created_at           DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime             @default(now()) @db.Timestamptz(6)
+  invoices             invoices[]
+  subscription_items   subscription_items[]
+  organizations        organizations        @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  plan_versions        plan_versions        @relation(fields: [plan_version_id], references: [id], onUpdate: NoAction)
+
+  @@index([status, billing_period_end], map: "subscriptions_status_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model usage_events {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String        @db.Uuid
+  location_id     String?       @db.Uuid
+  event_type      String
+  quantity        Int           @default(1)
+  reference_type  String?
+  reference_id    String?
+  idempotency_key String
+  occurred_at     DateTime      @default(now()) @db.Timestamptz(6)
+  is_test         Boolean       @default(false)
+  metadata        Json          @default("{}")
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  locations       locations?    @relation(fields: [organization_id, location_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "usage_events_location_fk")
+  organizations   organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([organization_id, event_type, idempotency_key], map: "usage_events_idempotency_unique")
+}
+
+enum audit_outcome {
+  SUCCESS
+  DENIED
+  FAILURE
+}
+
+enum booking_hold_status {
+  ACTIVE
+  CONFIRMED
+  EXPIRED
+  CANCELLED
+}
+
+enum booking_payment_attempt_status {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum booking_payment_method {
+  CASH
+  MANUAL_TRANSFER
+  LINE_PAY_MANUAL
+  OTHER
+}
+
+enum booking_payment_status {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+  FAILED
+}
+
+enum booking_refund_status {
+  PENDING
+  CONFIRMED
+  REJECTED
+  FAILED
+}
+
+enum booking_source {
+  ONLINE
+  PHONE
+  LINE
+  WALK_IN
+  STAFF
+  OWNER
+  IMPORT
+  OTHER
+}
+
+enum booking_status {
+  PENDING_PAYMENT
+  CONFIRMED
+  CHECKED_IN
+  IN_SERVICE
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+  EXPIRED
+  RESCHEDULED
+}
+
+enum cancellation_fee_mode {
+  NONE
+  FIXED
+  PERCENTAGE
+  DEPOSIT_FORFEIT
+}
+
+enum consent_status {
+  GRANTED
+  REVOKED
+}
+
+enum consent_type {
+  MARKETING
+  SERVICE
+  PHOTO
+}
+
+enum customer_contact_type {
+  PHONE
+  EMAIL
+  LINE
+}
+
+enum customer_deposit_mode {
+  DEFAULT
+  REQUIRED
+  EXEMPT
+}
+
+enum customer_note_sensitivity {
+  STANDARD
+  SENSITIVE
+  MEDICAL
+}
+
+enum customer_source {
+  LINE
+  GOOGLE
+  INSTAGRAM
+  FACEBOOK
+  WEBSITE
+  WALK_IN
+  PHONE
+  REFERRAL
+  OTHER
+}
+
+enum deposit_mode {
+  NONE
+  FIXED
+  PERCENTAGE
+}
+
+enum feature_key {
+  ONLINE_BOOKING
+  BASIC_CALENDAR
+  STAFF_SCHEDULING
+  CUSTOMER_CRM
+  CUSTOMER_BLACKLIST
+  CUSTOMER_MEDIA
+  BUSINESS_HOURS
+  RESOURCE_MANAGEMENT
+  LINE_NOTIFICATIONS
+  EMAIL_NOTIFICATIONS
+  DEPOSITS
+  CANCELLATION_RULES
+  MULTI_LOCATION
+  CSV_EXPORT
+  ADVANCED_REPORTS
+  SCHEDULED_REPORTS
+  CUSTOM_BRANDING
+  AUDIT_VIEWER
+  API_ACCESS
+  WEBHOOK_ACCESS
+  CUSTOM_DOMAIN
+  WHITE_LABEL
+  MEMBERSHIPS_PACKAGES
+  AI_ASSISTANT
+  MARKETPLACE
+}
+
+enum organization_entity_type {
+  SOLE_PROPRIETOR
+  COMPANY
+}
+
+enum feature_override_type {
+  ALLOW
+  DENY
+  LIMIT
+}
+
+enum invoice_status {
+  DRAFT
+  ISSUED
+  PAID
+  VOID
+  OVERDUE
+}
+
+enum location_booking_state {
+  OPEN
+  PAUSED
+  CLOSED
+}
+
+enum manual_payment_status {
+  PENDING
+  CONFIRMED
+  REJECTED
+  REVERSED
+}
+
+enum membership_status {
+  INVITED
+  ACTIVE
+  DISABLED
+  REMOVED
+}
+
+enum merchant_application_status {
+  DRAFT
+  SUBMITTED
+  PENDING_REVIEW
+  NEEDS_INFO
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  EXPIRED
+}
+
+enum notification_channel {
+  LINE
+  EMAIL
+  SMS
+}
+
+enum notification_delivery_status {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+  DISABLED
+}
+
+enum notification_event_type {
+  BOOKING_CONFIRMED
+  BOOKING_RESCHEDULED
+  BOOKING_CANCELLED
+  BOOKING_REMINDER_24H
+  BOOKING_REMINDER_3H
+  BOOKING_REMINDER_1H
+  BOOKING_PAYMENT_PENDING
+  BOOKING_PAYMENT_CONFIRMED
+  BOOKING_COMPLETED
+  REVIEW_REQUEST
+  REVISIT_REMINDER
+  NO_SHOW_NOTICE
+}
+
+enum notification_integration_status {
+  DISABLED
+  ACTIVE
+  ERROR
+}
+
+enum notification_job_status {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  DEAD_LETTER
+  CANCELLED
+}
+
+enum operational_alert_severity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum operational_alert_status {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum organization_status {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  GRACE_PERIOD
+  SUSPENDED
+  CANCELLED
+}
+
+enum public_attempt_outcome {
+  ALLOWED
+  DENIED
+  ERROR
+}
+
+enum public_session_status {
+  ACTIVE
+  CONSUMED
+  EXPIRED
+  REVOKED
+}
+
+enum report_schedule_type {
+  DAILY_OPERATIONS
+  WEEKLY_REVENUE
+  STAFF_UTILIZATION
+  SERVICE_PERFORMANCE
+}
+
+enum resource_kind {
+  ROOM
+  BED
+  CHAIR
+  NAIL_TABLE
+  EYELASH_BED
+  SPA_ROOM
+  EQUIPMENT
+  OTHER
+}
+
+enum schedule_exception_kind {
+  AVAILABLE
+  UNAVAILABLE
+}
+
+enum subscription_status {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  GRACE_PERIOD
+  SUSPENDED
+  CANCELLED
+}
+
+enum user_role {
+  PLATFORM_ADMIN
+  ORGANIZATION_OWNER
+  ORGANIZATION_ADMIN
+  FINANCE_VIEWER
+  LOCATION_MANAGER
+  FRONT_DESK
+  SERVICE_PROVIDER
+}

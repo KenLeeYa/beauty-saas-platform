@@ -1,0 +1,22 @@
+name: Backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * *"
+
+jobs:
+  database-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: scripts/database/export.sh
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_FILE: beauty-saas-${{ github.run_id }}.dump
+      - uses: actions/upload-artifact@v4
+        with:
+          name: database-backup
+          path: beauty-saas-${{ github.run_id }}.dump
+          retention-days: 10
