@@ -1,4 +1,5 @@
 import {chromium, expect as browserExpect} from '@playwright/test';
+import {createHash} from 'node:crypto';
 import {chooseLanguage} from './language-menu';
 import {waitForSkillCatalog} from './skill-catalog';
 import {expect, it} from 'vitest';
@@ -512,6 +513,12 @@ it.skipIf(!process.env.UNIFIED_TEST_UI_URL || !process.env.UNIFIED_TEST_DATABASE
     const tokens: string[] = [];
     let resourceId: string | undefined;
     let holdRequests = 0;
+    let bookingSessionToken = '';
+    page.on('request', request => {
+      if (request.url().endsWith('/api/public/availability')) {
+        bookingSessionToken = request.headers()['x-booking-session'] ?? '';
+      }
+    });
     page.on('request', req => {if(req.url().endsWith('/api/public/holds')) holdRequests++;});
     const dates = () => page.locator('section[aria-labelledby="date-heading"] section[aria-label] button').filter({hasText: '可查詢'});
     const timeDialog = () => page.getByRole('dialog');
@@ -572,6 +579,43 @@ it.skipIf(!process.env.UNIFIED_TEST_UI_URL || !process.env.UNIFIED_TEST_DATABASE
         expect(await page.locator('button[data-date][aria-pressed=true]').getAttribute('data-date')).toBe(selectedDate);
         expect(holdRequests).toBe(calls);
         expect(await prisma.bookings.count({where:{customer_id:customer.id}})).toBe(0);
+      }
+      for (const action of ['availability','hold','release','confirm']) {
+        const chosenDate = await page.locator('button[data-date][aria-pressed=true]').getAttribute('data-date');
+        if (action === 'hold') {
+          await page.getByRole('button',{name:'上一步',exact:true}).click();
+          await page.locator(`button[data-date="${chosenDate}"]`).click();
+          await times().first().waitFor();
+          await times().first().click();
+        }
+        // Expire only this test's real session and hold, as the production TTL does.
+        const expiredToken = bookingSessionToken;
+        expect(expiredToken).not.toBe('');
+        const expiredSession = await prisma.public_booking_sessions.update({
+          where:{token_hash:createHash('sha256').update(expiredToken).digest('hex')},
+          data:{status:'EXPIRED',expires_at:new Date(Date.now()-1000)},
+        });
+        await prisma.booking_holds.updateMany({where:{public_booking_session_id:expiredSession.id,status:'ACTIVE'},data:{created_at:new Date(Date.now()-60_000),expires_at:new Date(Date.now()-1000)}});
+        await prisma.$queryRaw`select beauty_private.expire_booking_holds()`;
+        if (action === 'confirm') await page.getByRole('button',{name:'送出預約',exact:true}).click();
+        else if (action === 'hold') await timeDialog().getByRole('button',{name:'確認時間',exact:true}).click();
+        else {
+          await page.getByRole('button',{name:'上一步',exact:true}).click();
+          if (action === 'release') {
+            await page.getByRole('button',{name:'上一步',exact:true}).click();
+            await page.locator('section[aria-labelledby=staff-heading] button').last().click();
+          } else await page.locator(`button[data-date="${chosenDate}"]`).click();
+        }
+        await browserExpect(timeDialog()).toBeHidden();
+        await browserExpect(page.getByRole('alert').filter({hasText:'預約工作階段已失效。'})).toBeVisible();
+        for (const locale of ['en','vi','zh-TW'] as Locale[]) {
+          await switchLanguage(page,locale,'選擇日期與時間');
+        }
+        await chooseTime();
+        expect(bookingSessionToken).not.toBe(expiredToken);
+        expect(await details.locator('input').first().inputValue()).toBe('Synthetic locale customer');
+        expect(await details.locator('textarea').inputValue()).toBe('注音與 tiếng Việt draft');
+        expect(await details.locator('input[type=checkbox]').first().isChecked()).toBe(true);
       }
       await checkResponsive(page,'legacy-booking-zh');
       await switchLanguage(page,'vi','填寫預約資料');
