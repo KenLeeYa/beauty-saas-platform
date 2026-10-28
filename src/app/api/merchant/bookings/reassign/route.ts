@@ -31,13 +31,15 @@ export async function GET(request: NextRequest): Promise<Response> {
     if (request.nextUrl.searchParams.get("review") === "qualification") {
       const offset = z.coerce.number().int().min(0).max(1000000)
         .parse(request.nextUrl.searchParams.get("offset") ?? 0);
-      return jsonSuccess(await listQualificationReviews(context, offset),
+      const limit = z.coerce.number().int().min(1).max(50).parse(request.nextUrl.searchParams.get("limit") ?? 50);
+      const search = z.string().trim().max(100).parse(request.nextUrl.searchParams.get("search") ?? "");
+      return jsonSuccess(await listQualificationReviews(context, offset, {limit, search}),
         { headers: { "x-request-id": requestId } });
     }
     const staffId = z.uuid().parse(request.nextUrl.searchParams.get("staffId"));
     return jsonSuccess({ bookings: await listAtRiskFutureBookings(context, staffId) },
       { headers: { "x-request-id": requestId } });
-  } catch (error) { return jsonError(error, requestId); }
+  } catch (error) { return jsonError(error, requestId, request); }
 }
 
 export async function PATCH(request: NextRequest): Promise<Response> {
@@ -48,5 +50,5 @@ export async function PATCH(request: NextRequest): Promise<Response> {
     const command = commandSchema.parse(await request.json());
     await reassignFutureBooking({ context, ...command, requestId });
     return jsonSuccess({ updated: true }, { headers: { "x-request-id": requestId } });
-  } catch (error) { return jsonError(error, requestId); }
+  } catch (error) { return jsonError(error, requestId, request); }
 }

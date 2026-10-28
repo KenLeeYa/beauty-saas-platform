@@ -272,7 +272,11 @@ async function configurePolicies(input: {
         free_cancellation_hours:
           input.payload.cancellationCutoffHours,
         late_fee_mode: "DEPOSIT_FORFEIT" as const,
+        late_fee_fixed_minor: null,
+        late_fee_percentage: null,
         no_show_fee_mode: "DEPOSIT_FORFEIT" as const,
+        no_show_fee_fixed_minor: null,
+        no_show_fee_percentage: null,
         is_active: true,
       };
       if (cancellation) {

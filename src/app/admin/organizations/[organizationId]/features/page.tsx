@@ -1,3 +1,5 @@
+import { getLanguage } from "@/lib/i18n/server";
+import { translate } from "@/lib/i18n/messages";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 
@@ -16,6 +18,8 @@ export default async function OrganizationFeaturesPage({
     organizationId: string;
   }>;
 }) {
+  const { locale } = await getLanguage();
+  const t = (key: string) => translate(locale, key);
   const session = await getCurrentSession();
   if (!session) {
     redirect("/");
@@ -33,10 +37,9 @@ export default async function OrganizationFeaturesPage({
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <div>
-            <p className="text-xs font-semibold text-teal">平台管理</p>
+            <p className="text-xs font-semibold text-teal">{t("平台管理")}</p>
             <h1 className="mt-1 text-xl font-semibold text-ink">
-              商家功能權益
-            </h1>
+              {t("商家功能權益")}</h1>
           </div>
           <LogoutButton />
         </div>

@@ -98,6 +98,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return response;
   } catch (error) {
-    return jsonError(error);
+    return jsonError(error, undefined, request);
   }
 }

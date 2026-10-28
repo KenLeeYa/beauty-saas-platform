@@ -4,6 +4,7 @@ import { OperationsReview } from "./review";
 import { getCurrentSession } from "@/server/auth/session";
 import { hasCapability } from "@/server/authorization/capabilities";
 import { resolveMerchantContext } from "@/server/merchant/context";
+import { canShowModule } from "@/server/entitlements/module-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -17,5 +18,8 @@ export default async function OperationsPage({ searchParams }: { searchParams: P
   if (!context.location || (!hasCapability(context.roles, "staff.manage") &&
       !hasCapability(context.roles, "billing.read"))) forbidden();
   return <OperationsReview organization={context.organization.slug}
-    location={context.location.slug} locationName={context.location.name} />;
+    organizationName={context.organization.name} identity={session.displayName}
+    crmVisible={await canShowModule(context, "CUSTOMER_CRM")}
+    teamVisible={hasCapability(context.roles,"team.read")}
+    location={context.location.slug} locationName={context.location.name} timezone={context.location.timezone} />;
 }

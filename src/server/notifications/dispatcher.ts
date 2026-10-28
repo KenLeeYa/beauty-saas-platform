@@ -89,6 +89,7 @@ function findOutboxForDelivery(limit = OUTBOX_BATCH_SIZE) {
         select: {
           display_name: true,
           contact_preference: true,
+          preferred_language: true,
           customer_contacts: {
             select: {
               contact_type: true,
@@ -546,6 +547,7 @@ async function processRunnableJobs(
             select: {
               display_name: true,
               contact_preference: true,
+              preferred_language: true,
               customer_contacts: {
                 select: {
                   contact_type: true,
@@ -635,6 +637,7 @@ async function processRunnableJobs(
 
     const segment = record.bookings?.booking_segments[0];
     const presentation = renderNotification({
+      language: record.customers?.preferred_language,
       eventType: record.event_type,
       organizationName: record.organizations.name,
       locationName: record.locations?.name ?? record.organizations.name,

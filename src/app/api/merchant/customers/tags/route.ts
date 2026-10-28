@@ -47,6 +47,6 @@ export async function POST(request: NextRequest) {
       headers: { "x-request-id": requestId },
     });
   } catch (error) {
-    return jsonError(error, requestId);
+    return jsonError(error, requestId, request);
   }
 }

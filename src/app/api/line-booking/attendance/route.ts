@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { prisma } from "@/server/database/prisma";
 import { AppError } from "@/server/http/errors";
+import { mobileJsonError } from "@/server/http/response";
 import { requireMobileBookingContext } from "@/server/mobile/context";
 import { consumeRateLimit } from "@/server/security/rate-limit";
 import { recordClockEvent } from "@/server/staff/attendance";
@@ -33,9 +34,7 @@ export async function GET(request: Request): Promise<Response> {
       occurredAt: row.occurredAt.toISOString() })) },
       { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    if (error instanceof AppError) return Response.json({ error: error.message },
-      { status: error.status });
-    return Response.json({ error: "Attendance unavailable" }, { status: 400 });
+    return mobileJsonError(error, request);
   }
 }
 
@@ -49,8 +48,6 @@ export async function POST(request: Request): Promise<Response> {
       new Date(), command.idempotencyKey);
     return Response.json({ id }, { status: 201 });
   } catch (error) {
-    if (error instanceof AppError) return Response.json({ error: error.message },
-      { status: error.status });
-    return Response.json({ error: "Invalid clock event" }, { status: 400 });
+    return mobileJsonError(error, request);
   }
 }

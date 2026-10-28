@@ -13,9 +13,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { formatLocalDateTime } from "@/lib/presentation/date-time";
+import { translateError } from "@/lib/i18n/messages";
 import type { ApplicantOnboardingData } from "@/server/onboarding/data";
 
 import { LogoutButton } from "./logout-button";
+import { useLanguage } from "./language-provider";
 
 type ApiPayload = {
   data?: {
@@ -25,6 +27,7 @@ type ApiPayload = {
   };
   error?: {
     message?: string;
+    details?: { issues?: { path: string; message: string }[] };
   };
 };
 
@@ -37,6 +40,13 @@ const statusLabels: Readonly<Record<string, string>> = {
   REJECTED: "未通過",
   WITHDRAWN: "已撤回",
   EXPIRED: "已逾期",
+};
+
+const fieldLabels: Readonly<Record<string, string>> = {
+  businessName: "商家名稱", contactName: "聯絡人", contactEmail: "電子郵件",
+  contactPhone: "聯絡電話", industryType: "產業類型", desiredSlug: "商家網址代碼",
+  initialLocationName: "分店名稱", initialLocationAddress: "分店地址",
+  applicantNote: "申請備註",
 };
 
 function csrfToken(): string {
@@ -52,6 +62,7 @@ export function MerchantApplicationForm({
   data: ApplicantOnboardingData;
 }) {
   const router = useRouter();
+  const { locale, t } = useLanguage();
   const application = data.application;
   const canCreateAnother = Boolean(
     application &&
@@ -64,6 +75,7 @@ export function MerchantApplicationForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [issues, setIssues] = useState<{ path: string; message: string }[]>([]);
   const [form, setForm] = useState({
     businessName: canCreateAnother ? "" : application?.businessName ?? "",
     contactName:
@@ -97,6 +109,7 @@ export function MerchantApplicationForm({
   async function submit(shouldSubmit: boolean): Promise<void> {
     setIsSubmitting(true);
     setError(null);
+    setIssues([]);
     setFeedback(null);
 
     try {
@@ -116,6 +129,7 @@ export function MerchantApplicationForm({
       });
       const payload = (await response.json()) as ApiPayload;
       if (!response.ok || !payload.data) {
+        setIssues(payload.error?.details?.issues ?? []);
         throw new Error(
           payload.error?.message ?? "商家申請儲存失敗。",
         );
@@ -142,40 +156,39 @@ export function MerchantApplicationForm({
   )?.reason;
 
   return (
-    <main className="min-h-screen bg-mist">
+    <main className="onboarding-surface min-h-screen bg-mist">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div>
-            <p className="text-xs font-semibold text-teal">商家導入</p>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-teal">{t("商家導入")}</p>
             <h1 className="mt-1 text-xl font-semibold text-ink">
-              申請 Beauty SaaS 商家空間
+              {t("申請 Beauty SaaS 商家空間")}
             </h1>
           </div>
           <LogoutButton />
         </div>
       </header>
 
-      <div className="mx-auto max-w-5xl px-4 py-7 sm:px-6">
+      <div className="mx-auto max-w-5xl px-4 py-4 sm:px-6 sm:py-7">
         <Link
           className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-ink"
           href="/"
         >
           <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-          返回入口
+          {t("返回入口")}
         </Link>
 
         {application ? (
           <section className="mt-6 border-y border-slate-200 bg-white px-5 py-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs text-slate-500">目前狀態</p>
+                <p className="text-xs text-slate-500">{t("目前狀態")}</p>
                 <p className="mt-1 text-lg font-semibold text-ink">
-                  {statusLabels[application.status] ??
-                    application.status}
+                  {t(statusLabels[application.status] ?? application.status)}
                 </p>
               </div>
               <span className="rounded bg-teal/10 px-3 py-1.5 text-xs font-semibold text-teal">
-                版本 {application.version}
+                {t("版本")} {application.version}
               </span>
             </div>
             {latestReason &&
@@ -184,7 +197,7 @@ export function MerchantApplicationForm({
                 className="mt-4 border-l-4 border-coral bg-coral/5 px-4 py-3 text-sm text-slate-700"
                 role="status"
               >
-                平台回覆：{latestReason}
+                {t("平台回覆：")}{latestReason}
               </p>
             ) : null}
           </section>
@@ -198,10 +211,10 @@ export function MerchantApplicationForm({
               className="mx-auto h-9 w-9 text-teal"
             />
             <h2 className="mt-4 text-xl font-semibold text-ink">
-              商家空間已建立
+              {t("商家空間已建立")}
             </h2>
             <p className="mt-2 text-sm text-slate-600">
-              公開預約仍維持關閉，請先完成開店設定與測試預約。
+              {t("公開預約仍維持關閉，請先完成開店設定與測試預約。")}
             </p>
             <Link
               className="mt-5 inline-flex h-11 items-center gap-2 rounded-md bg-ink px-5 text-sm font-semibold text-white"
@@ -210,12 +223,12 @@ export function MerchantApplicationForm({
               )}&location=main`}
             >
               <Building2 aria-hidden="true" className="h-4 w-4" />
-              進入開店設定
+              {t("進入開店設定")}
             </Link>
           </section>
         ) : editable ? (
           <form
-            className="mt-6 space-y-7"
+            className="mt-4 space-y-4 sm:mt-6 sm:space-y-7"
             onSubmit={(event) => {
               event.preventDefault();
               void submit(true);
@@ -223,12 +236,12 @@ export function MerchantApplicationForm({
           >
             <section className="border-y border-slate-200 bg-white px-5 py-6">
               <h2 className="text-lg font-semibold text-ink">
-                商家與聯絡資料
+                {t("商家與聯絡資料")}
               </h2>
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <label className="block sm:col-span-2">
                   <span className="text-sm font-medium text-slate-700">
-                    商家名稱
+                    {t("商家名稱")}
                   </span>
                   <input
                     className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-teal"
@@ -244,7 +257,7 @@ export function MerchantApplicationForm({
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">
-                    聯絡人
+                    {t("聯絡人")}
                   </span>
                   <input
                     className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-teal"
@@ -260,9 +273,10 @@ export function MerchantApplicationForm({
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">
-                    產業類型
+                    {t("產業類型")}
                   </span>
                   <select
+                    aria-label={t("產業類型")}
                     className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3"
                     value={form.industryType}
                     onChange={(event) =>
@@ -272,18 +286,18 @@ export function MerchantApplicationForm({
                       }))
                     }
                   >
-                    <option value="BEAUTY">美容美體</option>
+                    <option value="BEAUTY">{t("美容美體")}</option>
                     <option value="SPA">SPA</option>
-                    <option value="MASSAGE">按摩舒壓</option>
-                    <option value="NAIL">美甲</option>
-                    <option value="EYELASH">美睫</option>
-                    <option value="HAIR">美髮</option>
-                    <option value="OTHER">其他</option>
+                    <option value="MASSAGE">{t("按摩舒壓")}</option>
+                    <option value="NAIL">{t("美甲")}</option>
+                    <option value="EYELASH">{t("美睫")}</option>
+                    <option value="HAIR">{t("美髮")}</option>
+                    <option value="OTHER">{t("其他")}</option>
                   </select>
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">
-                    Email
+                    {t("電子郵件")}
                   </span>
                   <input
                     className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-teal"
@@ -300,7 +314,7 @@ export function MerchantApplicationForm({
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">
-                    聯絡電話
+                    {t("聯絡電話")}
                   </span>
                   <input
                     className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-teal"
@@ -317,13 +331,14 @@ export function MerchantApplicationForm({
                 </label>
                 <label className="block sm:col-span-2">
                   <span className="text-sm font-medium text-slate-700">
-                    商家網址代碼
+                    {t("商家網址代碼")}
                   </span>
                   <div className="mt-2 flex overflow-hidden rounded-md border border-slate-300 bg-white focus-within:border-teal">
-                    <span className="flex items-center bg-slate-50 px-3 text-sm text-slate-500">
+                    <span aria-hidden="true" className="flex items-center bg-slate-50 px-3 text-sm text-slate-500">
                       /book/
                     </span>
                     <input
+                      aria-label={t("商家網址代碼")}
                       className="h-11 min-w-0 flex-1 px-3 outline-none"
                       pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
                       required
@@ -344,11 +359,11 @@ export function MerchantApplicationForm({
             </section>
 
             <section className="border-y border-slate-200 bg-white px-5 py-6">
-              <h2 className="text-lg font-semibold text-ink">第一間分店</h2>
+              <h2 className="text-lg font-semibold text-ink">{t("第一間分店")}</h2>
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">
-                    分店名稱
+                    {t("分店名稱")}
                   </span>
                   <input
                     className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-teal"
@@ -364,7 +379,7 @@ export function MerchantApplicationForm({
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">
-                    分店地址
+                    {t("分店地址")}
                   </span>
                   <input
                     className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-teal"
@@ -380,9 +395,10 @@ export function MerchantApplicationForm({
                 </label>
                 <label className="block sm:col-span-2">
                   <span className="text-sm font-medium text-slate-700">
-                    申請備註
+                    {t("申請備註")}
                   </span>
                   <textarea
+                    aria-label={t("申請備註")}
                     className="mt-2 min-h-28 w-full rounded-md border border-slate-300 px-3 py-3 outline-none focus:border-teal"
                     maxLength={1000}
                     value={form.applicantNote}
@@ -399,19 +415,25 @@ export function MerchantApplicationForm({
 
             <div aria-live="polite">
               {feedback ? (
-                <p className="text-sm font-medium text-teal">{feedback}</p>
+                <p className="text-sm font-medium text-teal">{t(feedback)}</p>
               ) : null}
               {error ? (
-                <p
-                  className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                <div
+                  className="min-w-0 break-words rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
                   role="alert"
                 >
-                  {error}
-                </p>
+                  <p>{translateError(locale, error)}</p>
+                  {issues.length > 0 ? <ul className="mt-2 space-y-2">
+                    {issues.map((issue, index) => <li key={`${issue.path}-${index}`}>
+                      {fieldLabels[issue.path] ? <strong>{t(fieldLabels[issue.path])}: </strong> : null}
+                      {translateError(locale, issue.message)}
+                    </li>)}
+                  </ul> : null}
+                </div>
               ) : null}
             </div>
 
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <div className="onboarding-actions grid grid-cols-2 gap-3 sm:flex sm:justify-end">
               <button
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-5 text-sm font-semibold text-ink"
                 disabled={isSubmitting}
@@ -419,7 +441,7 @@ export function MerchantApplicationForm({
                 onClick={() => void submit(false)}
               >
                 <Save aria-hidden="true" className="h-4 w-4" />
-                儲存草稿
+                {t("儲存草稿")}
               </button>
               <button
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-ink px-5 text-sm font-semibold text-white disabled:opacity-50"
@@ -427,7 +449,7 @@ export function MerchantApplicationForm({
                 type="submit"
               >
                 <Send aria-hidden="true" className="h-4 w-4" />
-                {isSubmitting ? "處理中" : "送出申請"}
+                {t(isSubmitting ? "處理中" : "送出申請")}
               </button>
             </div>
           </form>
@@ -438,17 +460,17 @@ export function MerchantApplicationForm({
               className="mx-auto h-8 w-8 text-gold"
             />
             <h2 className="mt-4 text-xl font-semibold text-ink">
-              平台正在處理申請
+              {t("平台正在處理申請")}
             </h2>
             <p className="mt-2 text-sm text-slate-600">
-              狀態更新會顯示在此頁，補件時才會重新開放編輯。
+              {t("狀態更新會顯示在此頁，補件時才會重新開放編輯。")}
             </p>
           </section>
         )}
 
         {application?.events.length ? (
           <section className="mt-8">
-            <h2 className="text-lg font-semibold text-ink">申請紀錄</h2>
+            <h2 className="text-lg font-semibold text-ink">{t("申請紀錄")}</h2>
             <ol className="mt-3 divide-y divide-slate-200 border-y border-slate-200 bg-white">
               {application.events.map((event) => (
                 <li
@@ -456,7 +478,7 @@ export function MerchantApplicationForm({
                   key={event.id}
                 >
                   <span className="font-medium text-ink">
-                    {statusLabels[event.newStatus] ?? event.newStatus}
+                    {t(statusLabels[event.newStatus] ?? event.newStatus)}
                   </span>
                   <time className="text-xs text-slate-500">
                     {formatLocalDateTime(event.createdAt)}

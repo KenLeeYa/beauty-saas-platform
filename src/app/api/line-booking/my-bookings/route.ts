@@ -1,3 +1,4 @@
+import { publicMessage } from '@/lib/line-booking/validation';
 import {actor} from '@/lib/line-booking/auth';
 import {withDb} from '@/lib/line-booking/db';
 import {message, storeQuery} from '@/lib/line-booking/validation';
@@ -46,8 +47,8 @@ export async function GET(request: Request) {
     });
     return Response.json(result, {headers: {'Cache-Control': 'no-store'}});
   } catch (error) {
-    if (error instanceof AppError) return Response.json({error:error.message},{status:error.status});
+    if (error instanceof AppError) return Response.json({error:publicMessage(error, request)},{status:error.status});
     const detail = message(error);
-    return Response.json({error: detail}, {status: /authentication|session/.test(detail) ? 401 : /forbidden/.test(detail) ? 403 : 400});
+    return Response.json({error: publicMessage(error, request)}, {status: /authentication|session/.test(detail) ? 401 : /forbidden/.test(detail) ? 403 : 400});
   }
 }

@@ -1,4 +1,6 @@
 import "server-only";
+import {customerSelect, presentCustomers} from "./customer-directory";
+import {hasRequiredSkills} from "@/lib/staff-skills";
 
 import {
   capabilitiesForRoles,
@@ -114,6 +116,8 @@ export type MerchantWorkspaceData = {
     postBufferMinutes: number;
     onlineBookingEnabled: boolean;
     staffCount: number;
+    requiredSkills: string[];
+    eligibleStaff: Array<{id: string; name: string}>;
     categoryName: string | null;
     imageUrl: string | null;
   }>;
@@ -236,6 +240,7 @@ export type MerchantWorkspaceData = {
 
 export async function getMerchantWorkspaceData(
   context: OrganizationContext,
+  options: { pagedCatalog?: boolean; pagedFacilities?: boolean } = {},
 ): Promise<MerchantWorkspaceData> {
   const location = requireLocation(context);
   const ownBookingsOnly = hasCapability(context.roles, "booking.own.read") &&
@@ -439,7 +444,7 @@ export async function getMerchantWorkspaceData(
           },
         })
       : Promise.resolve([]),
-    hasCapability(context.roles, "catalog.read")
+    !options.pagedCatalog && hasCapability(context.roles, "catalog.read")
       ? prisma.location_services.findMany({
           where: {
             organization_id: context.organization.id,
@@ -452,6 +457,7 @@ export async function getMerchantWorkspaceData(
           select: {
             id: true,
             online_booking_enabled: true,
+            required_skills: true,
             price_override_minor: true,
             duration_override_minutes: true,
             services: {
@@ -478,15 +484,19 @@ export async function getMerchantWorkspaceData(
             service_staff_assignments: {
               where: {
                 is_active: true,
+                effective_from: {lte: new Date()},
+                OR: [{effective_until: null},{effective_until:{gt:new Date()}}],
+                staff_profiles: {is_active:true,staff_location_assignments:{some:{location_id:location.id,is_active:true}}},
               },
               select: {
                 id: true,
+                staff_profiles: {select:{id:true,display_name:true,skills:true}},
               },
             },
           },
         })
       : Promise.resolve([]),
-    hasCapability(context.roles, "staff.read")
+    !options.pagedCatalog && hasCapability(context.roles, "staff.read")
       ? prisma.staff_profiles.findMany({
           where: {
             organization_id: context.organization.id,
@@ -510,7 +520,7 @@ export async function getMerchantWorkspaceData(
           },
         })
       : Promise.resolve([]),
-    hasCapability(context.roles, "resource.read")
+    !options.pagedFacilities && hasCapability(context.roles, "resource.read")
       ? prisma.resources.findMany({
           where: {
             organization_id: context.organization.id,
@@ -534,78 +544,10 @@ export async function getMerchantWorkspaceData(
       : Promise.resolve([]),
     canReadCustomers
       ? prisma.customers.findMany({
-          where: {
-            organization_id: context.organization.id,
-            is_active: true,
-          },
-          orderBy: {
-            created_at: "desc",
-          },
-          take: 100,
-          select: {
-            id: true,
-            display_name: true,
-            birthday: true,
-            deposit_mode: true,
-            is_blacklisted: true,
-            blacklist_reason: true,
-            customer_contacts: {
-              where: {
-                contact_type: "PHONE",
-                is_primary: true,
-              },
-              take: 1,
-              select: {
-                value: true,
-              },
-            },
-            customer_metrics: {
-              select: {
-                last_service_at: true,
-                completed_count: true,
-                cancelled_count: true,
-                no_show_count: true,
-                total_spend_minor: true,
-              },
-            },
-            customer_tag_assignments: {
-              orderBy: {
-                created_at: "asc",
-              },
-              select: {
-                customer_tags: {
-                  select: {
-                    id: true,
-                    name: true,
-                    color: true,
-                  },
-                },
-              },
-            },
-            customer_notes: {
-              where: {
-                deleted_at: null,
-                ...(canReadSensitiveCustomers
-                  ? {}
-                  : { sensitivity: "STANDARD" as const }),
-              },
-              orderBy: {
-                created_at: "desc",
-              },
-              take: 5,
-              select: {
-                id: true,
-                note: true,
-                sensitivity: true,
-                created_at: true,
-                profiles_customer_notes_created_byToprofiles: {
-                  select: {
-                    display_name: true,
-                  },
-                },
-              },
-            },
-          },
+          where: { organization_id: context.organization.id, is_active: true },
+          orderBy: [{created_at:"desc"},{id:"asc"}],
+          take: 8,
+          select: customerSelect(canReadSensitiveCustomers),
         })
       : Promise.resolve([]),
     canReadCustomers
@@ -623,7 +565,7 @@ export async function getMerchantWorkspaceData(
           },
         })
       : Promise.resolve([]),
-    prisma.locations.findMany({
+    options.pagedFacilities ? Promise.resolve([]) : prisma.locations.findMany({
       where: {
         organization_id: context.organization.id,
         id: {
@@ -1014,7 +956,10 @@ export async function getMerchantWorkspaceData(
       preBufferMinutes: service.service_variants.pre_buffer_minutes,
       postBufferMinutes: service.service_variants.post_buffer_minutes,
       onlineBookingEnabled: service.online_booking_enabled,
-      staffCount: service.service_staff_assignments.length,
+      requiredSkills: service.required_skills,
+      eligibleStaff: service.service_staff_assignments.filter(({staff_profiles})=>hasRequiredSkills(service.required_skills,staff_profiles.skills))
+        .map(({staff_profiles})=>({id:staff_profiles.id,name:staff_profiles.display_name})),
+      staffCount: service.service_staff_assignments.filter(({staff_profiles})=>hasRequiredSkills(service.required_skills,staff_profiles.skills)).length,
       categoryName: service.services.service_categories?.name ?? null,
       imageUrl: publicMediaUrl(service.services.image_path),
     })),
@@ -1038,43 +983,7 @@ export async function getMerchantWorkspaceData(
       name: tag.name,
       color: tag.color,
     })),
-    customers: customerRecords.filter(()=>crmVisible).map((customer) => ({
-      id: customer.id,
-      displayName: customer.display_name,
-      phone: canReadSensitiveCustomers
-        ? customer.customer_contacts[0]?.value ?? null
-        : null,
-      birthday: customer.birthday?.toISOString().slice(0, 10) ?? null,
-      depositMode: customer.deposit_mode,
-      isBlacklisted: customer.is_blacklisted,
-      blacklistReason: customer.blacklist_reason,
-      lastServiceAt:
-        customer.customer_metrics?.last_service_at?.toISOString() ??
-        null,
-      completedCount:
-        customer.customer_metrics?.completed_count ?? 0,
-      cancelledCount:
-        customer.customer_metrics?.cancelled_count ?? 0,
-      noShowCount: customer.customer_metrics?.no_show_count ?? 0,
-      totalSpendMinor:
-        customer.customer_metrics?.total_spend_minor.toString() ??
-        "0",
-      tags: customer.customer_tag_assignments.map(
-        (assignment) => ({
-          id: assignment.customer_tags.id,
-          name: assignment.customer_tags.name,
-          color: assignment.customer_tags.color,
-        }),
-      ),
-      notes: customer.customer_notes.map((note) => ({
-        id: note.id,
-        note: note.note,
-        sensitivity: note.sensitivity,
-        createdAt: note.created_at.toISOString(),
-        authorName:
-          note.profiles_customer_notes_created_byToprofiles.display_name,
-      })),
-    })),
+    customers: crmVisible ? presentCustomers(customerRecords, canReadSensitiveCustomers) : [],
     locations: locationRecords.map((item) => ({
       id: item.id,
       name: item.name,

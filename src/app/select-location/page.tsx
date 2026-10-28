@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 
 import { ScopeSelector } from "@/components/scope-selector";
+import { getLanguage } from "@/lib/i18n/server";
+import { translate } from "@/lib/i18n/messages";
 import { getCurrentSession } from "@/server/auth/session";
 import { getSessionOrganizationSelections } from "@/server/auth/selection";
 
@@ -13,6 +15,8 @@ export default async function SelectLocationPage({
     organization?: string;
   }>;
 }) {
+  const { locale } = await getLanguage();
+  const t = (key: string) => translate(locale, key);
   const session = await getCurrentSession();
   if (!session) {
     redirect("/?next=/select-location");
@@ -47,7 +51,7 @@ export default async function SelectLocationPage({
       options={selectedOrganization.locations.map((location) => ({
         id: location.id,
         title: location.name,
-        description: `${selectedOrganization.name} · ${location.role}`,
+        description: `${selectedOrganization.name} · ${t(location.role)}`,
         href: location.destination,
       }))}
     />

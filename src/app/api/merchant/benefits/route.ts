@@ -141,7 +141,7 @@ export async function GET(request: NextRequest): Promise<Response> {
           { paidMinor: booking.total_minor-bonus, bonusMinor: bonus }, rules) : [] });
     }
     throw new AppError("BAD_REQUEST", "Customer or booking required", 400);
-  } catch (error) { return jsonError(error, requestId); }
+  } catch (error) { return jsonError(error, requestId, request); }
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
@@ -217,5 +217,5 @@ export async function POST(request: NextRequest): Promise<Response> {
       bookingId: input.bookingId, bookingRefundId: input.bookingRefundId,
       action: input.action, quantity: input.quantity,
       idempotencyKey: input.idempotencyKey }));
-  } catch (error) { return jsonError(error, requestId); }
+  } catch (error) { return jsonError(error, requestId, request); }
 }

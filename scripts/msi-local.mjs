@@ -74,13 +74,29 @@ try {
   } else if (mode === "build") {
     run(["node_modules/prisma/build/index.js", "generate"]);
     run(["node_modules/next/dist/bin/next", "build"]);
+  } else if (mode === "showcase") {
+    run(["scripts/local-showcase.mjs", ...(process.argv.includes("--apply") ? ["--apply"] : [])]);
+  } else if (mode === "isolated-showcase") {
+    run(["scripts/isolated-showcase.mjs", ...(process.argv.includes("--apply") ? ["--apply"] : [])]);
+  } else if (mode === "phone-fixture") {
+    env.BEAUTY_PHYSICAL_FIXTURE = process.env.BEAUTY_PHYSICAL_FIXTURE || "prepare";
+    run(["node_modules/vitest/vitest.mjs", "run", "tests/physical-phone-fixture.integration.test.ts"]);
   } else if (mode === "ui") {
     env.UNIFIED_TEST_UI_URL = origins[0];
     env.UNIFIED_UI_TEST_URL = origins[0];
     env.UNIFIED_UI_LAN_URL = origins[2] || "";
     run(["node_modules/vitest/vitest.mjs", "run", "--no-file-parallelism",
+      "tests/merchant-directory-ui.integration.test.ts",
+      "tests/facility-directory-ui.integration.test.ts",
+      "tests/language-ui.integration.test.ts",
+      "tests/app-shell-ui.integration.test.ts",
+      "tests/merchant-pages-ui.integration.test.ts",
+      "tests/merchant-settings-ui.integration.test.ts",
+      "tests/merchant-business-ui.integration.test.ts",
+      "tests/merchant-navigation-ui.integration.test.ts",
       "tests/line-booking-public-ui.integration.test.ts", "tests/operations-ui.integration.test.ts",
-      "tests/msi-role-ui.integration.test.ts", "tests/booking-reassignment.integration.test.ts"]);
+      "tests/msi-role-ui.integration.test.ts", "tests/booking-reassignment.integration.test.ts",
+      ...(process.env.BEAUTY_UI_TEST_NAME ? ["-t", process.env.BEAUTY_UI_TEST_NAME] : [])]);
   } else if (mode === "start") {
     env.MEMBER_VALUE_TEST_ONLY = "true";
     env.PAYROLL_TEST_ONLY = "true";

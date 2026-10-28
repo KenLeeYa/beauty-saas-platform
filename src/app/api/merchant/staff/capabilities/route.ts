@@ -36,6 +36,6 @@ export async function PATCH(request: NextRequest): Promise<Response> {
       walkInEligible: input.walkInEligible, reason: input.reason });
     return jsonSuccess({ updated: true, ...result }, { headers: { "x-request-id": requestId } });
   } catch (error) {
-    return jsonError(error, requestId);
+    return jsonError(error, requestId, request);
   }
 }

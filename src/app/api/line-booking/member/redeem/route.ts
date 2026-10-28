@@ -1,3 +1,6 @@
+import { publicMessage } from '@/lib/line-booking/validation';
+import { translateError } from '@/lib/i18n/messages';
+import { requestLocale } from '@/lib/i18n/request';
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
@@ -36,8 +39,8 @@ export async function POST(request: Request): Promise<Response> {
       customerId: rows[0].customerId, reservationId: command.reservationId,
       qrToken: command.qrToken, idempotencyKey: command.idempotencyKey }));
   } catch (error) {
-    if (error instanceof AppError) return Response.json({ error: error.message },
+    if (error instanceof AppError) return Response.json({ error: publicMessage(error, request) },
       { status: error.status });
-    return Response.json({ error: "Invalid redemption" }, { status: 400 });
+    return Response.json({ error: translateError(requestLocale(request), "核銷資料無效，請確認後再試。") }, { status: 400 });
   }
 }

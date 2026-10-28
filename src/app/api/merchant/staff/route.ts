@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import {revalidateTag} from "next/cache";
 
 import {
   assertSessionCsrf,
@@ -12,6 +13,19 @@ import {
   merchantScopeSchema,
 } from "@/server/merchant/schemas";
 import { getRequestId } from "@/server/security/request";
+import {catalogDirectorySchema,listMerchantStaff} from "@/server/merchant/catalog-directory";
+
+export async function GET(request: NextRequest) {
+  const requestId=getRequestId(request);
+  try {
+    const session=await requireRequestSession(request);
+    const params=request.nextUrl.searchParams;
+    const scope=merchantScopeSchema.parse({organization:params.get("organization"),location:params.get("location")});
+    const context=await resolveMerchantContext({session,organizationSlug:scope.organization,locationSlug:scope.location});
+    const input=catalogDirectorySchema.parse(Object.fromEntries(params));
+    return jsonSuccess(await listMerchantStaff(context,input),{headers:{"x-request-id":requestId,"cache-control":"no-store"}});
+  } catch(error) {return jsonError(error,requestId,request);}
+}
 
 export async function POST(request: NextRequest) {
   const requestId = getRequestId(request);
@@ -28,11 +42,13 @@ export async function POST(request: NextRequest) {
       locationSlug: scope.location,
     });
     const input = createMerchantStaffSchema.parse(await request.json());
+    const result=await createMerchantStaff({ context, ...input, requestId });
+    revalidateTag("public-booking-catalog", {expire: 0});
     return jsonSuccess(
-      await createMerchantStaff({ context, ...input, requestId }),
+      result,
       { status: 201, headers: { "x-request-id": requestId } },
     );
   } catch (error) {
-    return jsonError(error, requestId);
+    return jsonError(error, requestId, request);
   }
 }

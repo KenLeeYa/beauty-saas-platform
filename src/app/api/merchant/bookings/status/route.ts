@@ -42,6 +42,6 @@ export async function PATCH(request: NextRequest) {
       },
     );
   } catch (error) {
-    return jsonError(error, requestId);
+    return jsonError(error, requestId, request);
   }
 }

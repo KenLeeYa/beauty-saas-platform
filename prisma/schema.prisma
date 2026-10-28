@@ -889,6 +889,7 @@ model location_services {
   location_id                  String                      @db.Uuid
   service_id                   String                      @db.Uuid
   service_variant_id           String                      @db.Uuid
+  required_skills              String[]                    @default([])
   price_override_minor         Int?
   duration_override_minutes    Int?
   deposit_fixed_override_minor Int?

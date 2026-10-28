@@ -62,7 +62,19 @@
       "entry_removal_count": 25,
       "entry_removal_percent": 25
     },
-    "rules": []
+    "rules": [
+      {
+        "rule_id": "graphify-derived-cache",
+        "action": "exclude",
+        "pattern": "graphify-out",
+        "pattern_kind": "directory",
+        "reason": "Rebuildable local Graphify graph and AST caches are derived analysis artifacts, not authored application sources. Preserve every existing formal Entry and all application source coverage.",
+        "source": "user",
+        "created_by": "codex",
+        "order": 0,
+        "enabled": true
+      }
+    ]
   },
   "cognition_budget": {
     "version": "cognition-budget-policy/v1",

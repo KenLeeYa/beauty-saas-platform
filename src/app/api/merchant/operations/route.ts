@@ -109,7 +109,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       id: row.profile_id, name: row.profiles.display_name })),
       staff: staff.map(row => ({ id: row.id, name: row.display_name })) },
       { headers: { "x-request-id": requestId, "Cache-Control": "no-store" } });
-  } catch (error) { return jsonError(error, requestId); }
+  } catch (error) { return jsonError(error, requestId, request); }
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
@@ -143,5 +143,5 @@ export async function POST(request: NextRequest): Promise<Response> {
           idempotencyKey: input.idempotencyKey as string }));
       default: throw new AppError("BAD_REQUEST", "Unknown operation", 400);
     }
-  } catch (error) { return jsonError(error, requestId); }
+  } catch (error) { return jsonError(error, requestId, request); }
 }

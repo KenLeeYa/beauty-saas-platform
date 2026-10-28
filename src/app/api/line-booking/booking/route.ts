@@ -1,3 +1,4 @@
+import { publicMessage } from '@/lib/line-booking/validation';
 import { withDb } from '@/lib/line-booking/db';
 import { actor } from '@/lib/line-booking/auth';
 import {requireSameOrigin} from '@/lib/line-booking/request-security';
@@ -8,6 +9,7 @@ import {requireMobileBookingContext} from '@/server/mobile/context';
 import {bookMobile} from '@/server/mobile/booking';
 import {AppError} from '@/server/http/errors';
 import {consumeRateLimit} from '@/server/security/rate-limit';
+import {requestLocale} from '@/lib/i18n/request';
 
 export async function POST(request: Request) {
   try {
@@ -19,6 +21,7 @@ export async function POST(request: Request) {
       await consumeRateLimit({scope:`mobile-booking:${context.locationId}`,
         identifier:mobileActor.sessionId,limit:12,windowMs:30*60_000});
       return Response.json(await bookMobile({actor:mobileActor,context,
+        notificationLocale: requestLocale(request),
         serviceVariantId:input.serviceId,staffProfileId:input.staffId,startsAt:input.start,
         name:input.name,phone:input.phone,source:input.source,
         idempotencyKey:input.idempotencyKey,holdOnly:input.hold,
@@ -44,8 +47,8 @@ export async function POST(request: Request) {
     });
     return Response.json(result,{status:201});
   } catch(error) {
-    if (error instanceof AppError) return Response.json({error:error.message},{status:error.status});
+    if (error instanceof AppError) return Response.json({error:publicMessage(error, request)},{status:error.status});
     const detail=message(error);const status=/authentication|LINE identity/.test(detail)?401:/forbidden/.test(detail)?403:400;
-    return Response.json({error:detail},{status});
+    return Response.json({error:publicMessage(error, request)},{status});
   }
 }

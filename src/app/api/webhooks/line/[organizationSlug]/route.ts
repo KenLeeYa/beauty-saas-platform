@@ -48,6 +48,6 @@ export async function POST(
       },
     });
   } catch (error) {
-    return jsonError(error, requestId);
+    return jsonError(error, requestId, request);
   }
 }

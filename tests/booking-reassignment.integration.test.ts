@@ -1,6 +1,7 @@
 import { loadEnvConfig } from "@next/env";
 import { expect, it } from "vitest";
 import { chromium, type Locator, type Page } from "@playwright/test";
+import { chooseLanguage } from "./language-menu";
 
 import type { VerifiedMobileActor } from "../src/server/auth/line-mobile-session";
 import type { OrganizationContext } from "../src/server/authorization/context";
@@ -32,7 +33,9 @@ async function expectKeyboardControls(dialog: Locator, fieldName = "改派原因
       const body = element.closest("form")!.querySelector("textarea")!.closest("label")!.parentElement!.parentElement!;
       const bodyBounds = body.getBoundingClientRect();
       const hit = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-      return bounds.top >= viewport.offsetTop && bounds.bottom <= viewport.offsetTop + viewport.height + 1 &&
+      const keyboardInset = element.tagName === "BUTTON" &&
+        element.closest('[data-keyboard="true"]') && innerWidth < 640 ? 32 : 0;
+      return bounds.top >= viewport.offsetTop && bounds.bottom <= viewport.offsetTop + viewport.height - keyboardInset + 1 &&
         (element.tagName === "BUTTON" || (bounds.top >= bodyBounds.top && bounds.bottom <= bodyBounds.bottom + 1)) &&
         !!hit && element.contains(hit);
     }), "focused input and confirm must be visible, unclipped and hit-testable above the keyboard").toBe(true);
@@ -133,6 +136,11 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)(
         const first = await findQualificationReviews(transaction, manager);
         const second = await findQualificationReviews(transaction, manager, { offset: 50 });
         expect(first.items).toHaveLength(50);
+        const compact = await findQualificationReviews(transaction, manager, { limit: 6, search: first.items[0].staffName });
+        expect(compact.items).toHaveLength(6);
+        expect(compact.items.every(row => row.staffName.includes(first.items[0].staffName))).toBe(true);
+        const absent = await findQualificationReviews(transaction, manager, { limit: 6, search: "不存在的搜尋%_" });
+        expect(absent).toMatchObject({ items: [], total: 0 });
         expect(first.total).toBeGreaterThanOrEqual(52);
         expect(second.total).toBe(first.total);
         const emptyPage = await findQualificationReviews(transaction, manager, { offset: 100000 });
@@ -197,7 +205,7 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)(
       const browser = await chromium.launch({ executablePath:
         "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", headless: true });
       try {
-        const browserContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+        const browserContext = await browser.newContext({ locale: 'zh-TW', viewport: { width: 390, height: 844 } });
         await browserContext.addCookies([
           { name: "beauty_session", value: material.sessionToken, url: base },
           { name: "beauty_csrf", value: material.csrfToken, url: base },
@@ -367,7 +375,8 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)("reassigns one participant acr
       location_id: locationId, booking_id: booking.id, booking_segment_id: segments[1].id,
       staff_profile_id: replacement.id, starts_at: segments[0].starts_at, ends_at: segments[0].ends_at } });
     try {
-      await expect(reassignFutureBooking(command)).rejects.toBeDefined();
+      await expect(reassignFutureBooking(command)).rejects.toMatchObject({status: 409,
+        message: "此美容師當時已有安排，請選擇其他人員或稍後重試"});
       expect((await snapshot()).booking_staff_allocations.filter(row => row.id !== occupied.id))
         .toEqual(before.booking_staff_allocations);
       expect(await prisma.booking_events.count({ where: { booking_id: booking.id, event_type: "STAFF_REASSIGNED" } })).toBe(0);
@@ -379,7 +388,7 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)("reassigns one participant acr
       const browser = await chromium.launch({ executablePath:
         "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", headless: true });
       try {
-        const browserContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+        const browserContext = await browser.newContext({ locale: 'zh-TW', viewport: { width: 390, height: 844 } });
         await browserContext.addCookies([{ name: "beauty_session", value: material.sessionToken, url: base },
           { name: "beauty_csrf", value: material.csrfToken, url: base }]);
         const page = await browserContext.newPage();
@@ -406,6 +415,28 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)("reassigns one participant acr
         await dialog.getByLabel("改派原因").fill(command.reason);
         expect(await dialog.getByLabel("保留安排").textContent()).toContain(primary.display_name);
         expect(await dialog.getByLabel("保留安排").textContent()).toContain("Bundle service 2");
+        async function cycleDraftLanguages() {
+          const sheet = page.getByRole("dialog");
+          const retained = await sheet.locator("details ul").textContent();
+          for (const [language, heading, confirm] of [
+            ["en", "Reassign booking", "Confirm reassignment"],
+            ["vi", "Đổi nhân viên lịch hẹn", "Xác nhận đổi nhân viên"],
+            ["zh-TW", "改派預約", "確認改派"],
+          ]) {
+            await chooseLanguage(sheet, language);
+            await sheet.getByRole("heading", {name: heading, exact: true}).waitFor();
+            await expect.poll(() => sheet.locator("select").first().isDisabled()).toBe(false);
+            expect(await sheet.locator("textarea").inputValue()).toBe(command.reason);
+            expect(await sheet.locator("select").first().inputValue()).toBe(replacement.id);
+            expect(await sheet.locator("details ul").textContent()).toBe(retained);
+            const button = await sheet.getByRole("button", {name: confirm, exact: true}).boundingBox();
+            expect(button!.y + button!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+            expect(await sheet.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+            await page.screenshot({path: `.dev-logs/reassignment-language-${language}.png`});
+          }
+          expect(await snapshot()).toEqual(before);
+        }
+        await cycleDraftLanguages();
         for (const [width, height] of [[320, 640], [390, 844], [390, 420], [768, 900], [1440, 900]]) {
           await page.setViewportSize({ width, height });
           await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
@@ -458,6 +489,9 @@ it.skipIf(!process.env.UNIFIED_TEST_DATABASE_URL)("reassigns one participant acr
           expect(await dialog.getByRole("alert").textContent()).toBe("此美容師當時未排班或休假，請選擇其他人員");
           expect(await dialog.getByLabel("改派原因").inputValue()).toBe(command.reason);
           expect(await dialog.getByLabel("改派美容師").inputValue()).toBe(replacement.id);
+          await keyboardViewport(page, null);
+          await cycleDraftLanguages();
+          expect(await dialog.getByRole("alert").textContent()).toBe("此美容師當時未排班或休假，請選擇其他人員");
           await dialog.getByLabel("改派原因").focus();
           await keyboardViewport(page, 320, 96);
           await expectKeyboardControls(dialog);

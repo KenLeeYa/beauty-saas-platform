@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Linter, type ESLint } from "eslint";
 import { afterAll, describe, expect, it } from "vitest";
+import { z } from "zod";
 
 const require = createRequire(import.meta.url);
 const pluginRequire = createRequire(require.resolve("@next/eslint-plugin-next"));
@@ -21,6 +22,21 @@ afterAll(() => {
 // Both relative and absolute glob results resolve to the same Next project roots.
 const normalize = (values: string[]) => values.map(value => resolve(value).replaceAll("\\", "/").replace(/\/$/, "")).sort();
 const expected = normalize([join(fixture, "app-one"), join(fixture, "app-two")]);
+
+describe("bounded collection validation", () => {
+  it("rejects oversized arrays before validating their elements", () => {
+    let visits = 0;
+    const schema = z.array(z.string().superRefine(() => { visits += 1; })).max(30);
+    const result = schema.safeParse(Array.from({ length: 1000 }, () => "skill"));
+    expect(result.success).toBe(false);
+    expect(visits).toBe(0);
+    if (!result.success) expect(result.error.issues).toEqual([
+      expect.objectContaining({ code: "too_big", maximum: 30 }),
+    ]);
+    expect(schema.safeParse(["skill"]).success).toBe(true);
+    expect(visits).toBe(1);
+  });
+});
 
 describe("braces-free development dependency graph", () => {
   it("has no braces, micromatch, shadcn CLI or patch-package in the root lockfile", () => {

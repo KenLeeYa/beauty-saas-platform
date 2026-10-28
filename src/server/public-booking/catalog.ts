@@ -1,4 +1,5 @@
 import "server-only";
+import {hasRequiredSkills} from "@/lib/staff-skills";
 
 import { unstable_cache } from "next/cache";
 
@@ -197,6 +198,7 @@ export async function getPublicCatalogForContext(
         },
         select: {
           price_override_minor: true,
+          required_skills: true,
           duration_override_minutes: true,
           deposit_fixed_override_minor: true,
           deposit_percentage_override: true,
@@ -233,6 +235,7 @@ export async function getPublicCatalogForContext(
               staff_profiles: {
                 is_active: true,
                 public_visible: true,
+                staff_location_assignments: {some: {organization_id: context.organizationId, location_id: context.locationId, is_active: true}},
               },
             },
             orderBy: {
@@ -353,7 +356,7 @@ export async function getPublicCatalogForContext(
             ? Number(cancellationPolicy.late_fee_percentage)
             : null,
       },
-      staff: item.service_staff_assignments.map(({ staff_profiles }) => ({
+      staff: item.service_staff_assignments.filter(({staff_profiles}) => hasRequiredSkills(item.required_skills, staff_profiles.skills)).map(({ staff_profiles }) => ({
         id: staff_profiles.id,
         displayName: staff_profiles.display_name,
         title: staff_profiles.title,

@@ -42,6 +42,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     clearSessionCookies(response);
     return response;
   } catch (error) {
-    return jsonError(error);
+    return jsonError(error, undefined, request);
   }
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import {validateStaffSkills} from "./staff-skills";
 
 import { Prisma, type resource_kind } from "@prisma/client";
 
@@ -352,7 +353,7 @@ export async function createMerchantStaff(input: {
           organization_id: input.context.organization.id,
           display_name: input.displayName,
           title: input.title,
-          skills: input.skills,
+          skills: await validateStaffSkills(transaction,input.context.organization.id,input.skills),
           public_visible: true,
           is_active: true,
           sort_order: Date.now() % 1_000_000,

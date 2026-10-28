@@ -1,5 +1,7 @@
 "use client";
 
+import { useLanguage } from "@/components/language-provider";
+
 import {
   CheckCircle2,
   PauseCircle,
@@ -29,8 +31,8 @@ function csrfToken(): string {
   return match ? decodeURIComponent(match.split("=").slice(1).join("=")) : "";
 }
 
-function formatMoney(amountMinor: number, currency = "TWD"): string {
-  return new Intl.NumberFormat("zh-TW", {
+function formatMoney(amountMinor: number, currency: string, locale: string): string {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
     maximumFractionDigits: 0,
@@ -38,6 +40,8 @@ function formatMoney(amountMinor: number, currency = "TWD"): string {
 }
 
 export function PlatformBilling({ data }: { data: AdminBillingData }) {
+  const { locale, t, errorText } = useLanguage();
+  const [invoiceDescription] = useState(() => t("月租方案"));
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -58,7 +62,7 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
       });
       const payload = (await response.json()) as ApiPayload;
       if (!response.ok || !payload.data?.success) {
-        throw new Error(payload.error?.message ?? "帳務操作失敗。");
+        throw new Error(payload.error?.message ?? t("帳務操作失敗。"));
       }
       setFeedback("帳務資料已更新。");
       router.refresh();
@@ -93,10 +97,10 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
   ) {
     const outstanding = invoice.totalMinor - invoice.amountPaidMinor;
     const amount = window.prompt(
-      "請輸入本次確認金額（元）：",
+      t("請輸入本次確認金額（元）："),
       String(outstanding / 100),
     );
-    const reference = window.prompt("請輸入匯款或收款參考碼：");
+    const reference = window.prompt(t("請輸入匯款或收款參考碼："));
     if (!amount || !reference?.trim()) {
       return;
     }
@@ -113,7 +117,7 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
     action: "SUSPEND" | "REACTIVATE",
   ) {
     const reason = window
-      .prompt(action === "SUSPEND" ? "請輸入暫停原因：" : "請輸入恢復原因：")
+      .prompt(action === "SUSPEND" ? t("請輸入暫停原因：") : t("請輸入恢復原因："))
       ?.trim();
     if (!reason) {
       return;
@@ -121,7 +125,7 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
     if (
       action === "SUSPEND" &&
       !window.confirm(
-        "暫停後會立即關閉此商家的公開預約，確定繼續嗎？",
+        t("暫停後會立即關閉此商家的公開預約，確定繼續嗎？"),
       )
     ) {
       return;
@@ -134,35 +138,34 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="platform-surface space-y-6">
       <form
         className="border-y border-slate-200 bg-white px-5 py-6"
         onSubmit={issueInvoice}
       >
-        <h2 className="text-lg font-semibold text-ink">開立人工帳單</h2>
+        <h2 className="text-lg font-semibold text-ink">{t("開立人工帳單")}</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <label className="lg:col-span-2">
-            <span className="text-sm font-medium text-slate-700">商家</span>
+            <span className="text-sm font-medium text-slate-700">{t("商家")}</span>
             <select
               className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3"
               name="organizationId"
               required
             >
-              <option value="">選擇商家</option>
+              <option value="">{t("選擇商家")}</option>
               {data.organizations
                 .filter((organization) => organization.subscriptionId)
                 .map((organization) => (
                   <option key={organization.id} value={organization.id}>
                     {organization.name} ·{" "}
-                    {organization.planName ?? "未設定方案"}
+                    {organization.planName ?? t("未設定方案")}
                   </option>
                 ))}
             </select>
           </label>
           <label>
             <span className="text-sm font-medium text-slate-700">
-              期間開始
-            </span>
+              {t("期間開始")}</span>
             <input
               className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
               name="periodStart"
@@ -172,8 +175,7 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
           </label>
           <label>
             <span className="text-sm font-medium text-slate-700">
-              期間結束
-            </span>
+              {t("期間結束")}</span>
             <input
               className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
               name="periodEnd"
@@ -183,19 +185,17 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
           </label>
           <label className="lg:col-span-2">
             <span className="text-sm font-medium text-slate-700">
-              項目說明
-            </span>
+              {t("項目說明")}</span>
             <input
               className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
-              defaultValue="Beauty SaaS 月租方案"
+              defaultValue={invoiceDescription}
               name="description"
               required
             />
           </label>
           <label>
             <span className="text-sm font-medium text-slate-700">
-              未稅金額（元）
-            </span>
+              {t("未稅金額（元）")}</span>
             <input
               className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
               min="1"
@@ -206,8 +206,7 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
           </label>
           <label>
             <span className="text-sm font-medium text-slate-700">
-              稅額（元）
-            </span>
+              {t("稅額（元）")}</span>
             <input
               className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
               defaultValue="0"
@@ -219,8 +218,7 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
           </label>
           <label>
             <span className="text-sm font-medium text-slate-700">
-              繳款期限
-            </span>
+              {t("繳款期限")}</span>
             <input
               className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
               name="dueAt"
@@ -235,55 +233,54 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
           type="submit"
         >
           <ReceiptText aria-hidden="true" className="h-4 w-4" />
-          開立帳單
-        </button>
+          {t("開立帳單")}</button>
       </form>
 
       <div aria-live="polite">
         {feedback ? (
-          <p className="text-sm font-medium text-teal">{feedback}</p>
+          <p className="text-sm font-medium text-teal">{t(feedback)}</p>
         ) : null}
         {error ? (
           <p
             className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
             role="alert"
           >
-            {error}
+            {errorText(error)}
           </p>
         ) : null}
       </div>
 
       <section>
-        <h2 className="text-lg font-semibold text-ink">訂閱狀態</h2>
+        <h2 className="text-lg font-semibold text-ink">{t("訂閱狀態")}</h2>
         <div className="mt-3 overflow-x-auto border-y border-slate-200 bg-white">
-          <table className="w-full min-w-[760px] text-left text-sm">
+          <table className="legacy-table w-full min-w-[760px] text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500">
               <tr>
-                <th className="px-4 py-3 font-semibold">商家</th>
-                <th className="px-4 py-3 font-semibold">方案</th>
-                <th className="px-4 py-3 font-semibold">狀態</th>
-                <th className="px-4 py-3 font-semibold">本期截止</th>
-                <th className="px-4 py-3 font-semibold">操作</th>
+                <th className="px-4 py-3 font-semibold">{t("商家")}</th>
+                <th className="px-4 py-3 font-semibold">{t("方案")}</th>
+                <th className="px-4 py-3 font-semibold">{t("狀態")}</th>
+                <th className="px-4 py-3 font-semibold">{t("本期截止")}</th>
+                <th className="px-4 py-3 font-semibold">{t("操作")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {data.organizations.map((organization) => (
                 <tr key={organization.id}>
-                  <td className="px-4 py-3 font-medium text-ink">
+                  <td data-label={t("商家")} className="px-4 py-3 font-medium text-ink">
                     {organization.name}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {organization.planName ?? "未設定"}
+                  <td data-label={t("方案")} className="px-4 py-3 text-slate-600">
+                    {organization.planName ?? t("未設定")}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {organization.subscriptionStatus ?? "無訂閱"}
+                  <td data-label={t("狀態")} className="px-4 py-3 text-slate-600">
+                    {t(organization.subscriptionStatus ?? "無訂閱")}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td data-label={t("本期截止")} className="px-4 py-3 text-slate-600">
                     {organization.periodEnd
                       ? formatLocalDate(organization.periodEnd)
                       : "—"}
                   </td>
-                  <td className="px-4 py-3">
+                  <td data-label={t("操作")} className="px-4 py-3">
                     {organization.subscriptionStatus === "SUSPENDED" ? (
                       <button
                         className="inline-flex h-9 items-center gap-2 text-sm font-semibold text-teal disabled:opacity-50"
@@ -300,8 +297,7 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
                           aria-hidden="true"
                           className="h-4 w-4"
                         />
-                        恢復
-                      </button>
+                        {t("恢復")}</button>
                     ) : organization.subscriptionId ? (
                       <button
                         className="inline-flex h-9 items-center gap-2 text-sm font-semibold text-red-700 disabled:opacity-50"
@@ -318,8 +314,7 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
                           aria-hidden="true"
                           className="h-4 w-4"
                         />
-                        暫停
-                      </button>
+                        {t("暫停")}</button>
                     ) : (
                       <span className="text-slate-400">—</span>
                     )}
@@ -332,41 +327,42 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold text-ink">最近帳單</h2>
+        <h2 className="text-lg font-semibold text-ink">{t("最近帳單")}</h2>
         <div className="mt-3 overflow-x-auto border-y border-slate-200 bg-white">
-          <table className="w-full min-w-[860px] text-left text-sm">
+          <table className="legacy-table w-full min-w-[860px] text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500">
               <tr>
-                <th className="px-4 py-3 font-semibold">帳單</th>
-                <th className="px-4 py-3 font-semibold">商家</th>
-                <th className="px-4 py-3 font-semibold">狀態</th>
-                <th className="px-4 py-3 font-semibold">總額</th>
-                <th className="px-4 py-3 font-semibold">已付</th>
-                <th className="px-4 py-3 font-semibold">操作</th>
+                <th className="px-4 py-3 font-semibold">{t("帳單")}</th>
+                <th className="px-4 py-3 font-semibold">{t("商家")}</th>
+                <th className="px-4 py-3 font-semibold">{t("狀態")}</th>
+                <th className="px-4 py-3 font-semibold">{t("總額")}</th>
+                <th className="px-4 py-3 font-semibold">{t("已付")}</th>
+                <th className="px-4 py-3 font-semibold">{t("操作")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {data.invoices.map((invoice) => (
                 <tr key={invoice.id}>
-                  <td className="px-4 py-3 font-medium text-ink">
+                  <td data-label={t("帳單")} className="px-4 py-3 font-medium text-ink">
                     {invoice.number}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td data-label={t("商家")} className="px-4 py-3 text-slate-600">
                     {invoice.organizationName}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {invoice.status}
+                  <td data-label={t("狀態")} className="px-4 py-3 text-slate-600">
+                    {t(invoice.status)}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {formatMoney(invoice.totalMinor, invoice.currency)}
+                  <td data-label={t("總額")} className="px-4 py-3 text-slate-600">
+                    {formatMoney(invoice.totalMinor, invoice.currency, locale)}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td data-label={t("已付")} className="px-4 py-3 text-slate-600">
                     {formatMoney(
                       invoice.amountPaidMinor,
                       invoice.currency,
+                      locale,
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td data-label={t("操作")} className="px-4 py-3">
                     {["ISSUED", "OVERDUE"].includes(invoice.status) ? (
                       <button
                         className="inline-flex h-9 items-center gap-2 text-sm font-semibold text-teal disabled:opacity-50"
@@ -378,8 +374,7 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
                           aria-hidden="true"
                           className="h-4 w-4"
                         />
-                        確認收款
-                      </button>
+                        {t("確認收款")}</button>
                     ) : (
                       <span className="text-slate-400">—</span>
                     )}
@@ -390,8 +385,7 @@ export function PlatformBilling({ data }: { data: AdminBillingData }) {
           </table>
           {data.invoices.length === 0 ? (
             <p className="px-4 py-10 text-center text-sm text-slate-500">
-              目前沒有帳單。
-            </p>
+              {t("目前沒有帳單。")}</p>
           ) : null}
         </div>
       </section>

@@ -25,5 +25,5 @@ export async function POST(request:NextRequest) {
     const redirect=await startMobileLineLogin(request,store,session.profileId);
     return jsonSuccess({authorizeUrl:redirect.headers.get("location")},{
       headers:{"set-cookie":redirect.headers.get("set-cookie")??"","x-request-id":requestId}});
-  } catch(error) {return jsonError(error,requestId);}
+  } catch(error) {return jsonError(error,requestId, request);}
 }

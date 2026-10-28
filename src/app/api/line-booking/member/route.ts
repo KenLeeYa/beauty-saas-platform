@@ -5,6 +5,7 @@ import { prisma } from "@/server/database/prisma";
 import { resolveModuleVisibility } from "@/server/entitlements/module-visibility-policy";
 import { getEntitlement } from "@/server/entitlements/service";
 import { AppError } from "@/server/http/errors";
+import { mobileJsonError } from "@/server/http/response";
 import { getWalletBalance } from "@/server/members/ledger";
 import { getBenefitBalance } from "@/server/members/benefits";
 import { requireMobileBookingContext } from "@/server/mobile/context";
@@ -34,8 +35,6 @@ export async function GET(request: Request): Promise<Response> {
       newIssuanceEnabled, balance, issues },
       { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    if (error instanceof AppError) return Response.json({ error: error.message },
-      { status: error.status });
-    return Response.json({ error: "Member account unavailable" }, { status: 400 });
+    return mobileJsonError(error, request);
   }
 }

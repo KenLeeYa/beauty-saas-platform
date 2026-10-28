@@ -1,41 +1,38 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { z } from "zod";
+import { RefreshCw } from "lucide-react";
+import { MemberBenefits, walletSchema, benefitSchema } from "@/components/member-benefits";
 
 import styles from "./booking.module.css";
+import {useLanguage} from "@/components/language-provider";
 
-type MemberSummaryData = { visible: boolean; newIssuanceEnabled: boolean;
-  balance: { paidMinor: number; bonusMinor: number; totalMinor: number };
-  issues: Array<{ id: string; kind: string; available: number;
-    expiresAt: string | null }> };
+const summarySchema = z.object({ visible: z.boolean(), newIssuanceEnabled: z.boolean(),
+  balance: walletSchema, issues: z.array(benefitSchema) });
 
-function money(amountMinor: number): string {
-  return new Intl.NumberFormat("zh-TW", { style: "currency", currency: "TWD" })
-    .format(amountMinor / 100);
-}
-
-export default function MemberSummary({ store }: { store: string }) {
-  const [data, setData] = useState<MemberSummaryData | null>(null);
+export default function MemberSummary({ store, timezone }: { store: string; timezone: string }) {
+  const {t, errorText} = useLanguage();
+  const [data, setData] = useState<z.infer<typeof summarySchema> | null>(null);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     fetch(`/api/line-booking/member?store=${encodeURIComponent(store)}`,
-      { cache: "no-store" }).then(async response => {
-      if (response.ok && active) setData(await response.json() as MemberSummaryData);
-    }).catch(() => {});
-    return () => { active = false; };
-  }, [store]);
-  if (!data?.visible) return null;
-  return <section id="member" className={styles.panel} aria-label="我的會員權益">
-    <h2>我的會員權益</h2>
-    <dl aria-label="會員餘額">
-      <dt>儲值本金</dt><dd>{money(data.balance.paidMinor)}</dd>
-      <dt>贈送餘額</dt><dd>{money(data.balance.bonusMinor)}</dd>
-      <dt>合計</dt><dd>{money(data.balance.totalMinor)}</dd>
-    </dl>
-    {data.issues.length > 0 && <ul aria-label="已取得權益">
-      {data.issues.map(issue => <li key={issue.id}>{issue.kind} × {issue.available}
-        {issue.expiresAt ? ` · 到期 ${new Date(issue.expiresAt).toLocaleDateString("zh-TW")}` : ""}</li>)}
-    </ul>}
-    {!data.newIssuanceEnabled && <p className={styles.helper}>既有餘額與權益仍可查詢；目前不發行新權益。</p>}
+      { cache: "no-store", signal: controller.signal }).then(async response => {
+      if (!response.ok) throw Error("會員權益暫時無法載入，請稍後再試。");
+      const result = summarySchema.parse(await response.json());
+      if (!controller.signal.aborted) { setData(result); setError(""); }
+    }).catch(() => { if (!controller.signal.aborted) setError("會員權益暫時無法載入，請稍後再試。"); });
+    return () => controller.abort();
+  }, [store, attempt]);
+  return <section id="member" className={styles.panel} aria-label={t('我的會員權益')}>
+    <div className={styles.heading}><h2>{t('我的會員權益')}</h2>
+      <button type="button" className={styles.secondary} aria-label={t('重新載入會員權益')} title={t('重新載入會員權益')}
+        onClick={() => { setError(""); setData(null); setAttempt(value => value + 1); }}><RefreshCw size={18} /></button></div>
+    {error ? <p role="alert" className={styles.error}>{errorText(error)}</p> : !data ? <p role="status">{t('正在載入會員權益…')}</p> : <>
+      <MemberBenefits wallet={data.balance} benefits={data.issues} timezone={timezone} />
+      {!data.newIssuanceEnabled && <p className={styles.helper}>{t('目前未開放新權益；既有餘額與權益不受影響。')}</p>}
+    </>}
   </section>;
 }

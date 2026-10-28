@@ -9,6 +9,9 @@ if (!["127.0.0.1", "localhost", "::1"].includes(url.hostname) ||
   throw Error("Unified tests require a loopback database and APP_ENV=test");
 }
 const tests = [
+  "tests/facility-directory.integration.test.ts",
+  "tests/catalog-directory.integration.test.ts",
+  "tests/merchant-directory.integration.test.ts",
   "tests/public-mobile-core.integration.test.ts",
   "tests/reception-workflow.integration.test.ts",
   "tests/line-mobile-identity.integration.test.ts",
@@ -19,6 +22,7 @@ const tests = [
   "tests/module-guard.integration.test.ts",
   "tests/line-customer-link.integration.test.ts",
   "tests/staff-capability.integration.test.ts",
+  "tests/staff-skills.integration.test.ts",
   "tests/walkin-dispatch.integration.test.ts",
   "tests/exception-queue.integration.test.ts",
   "tests/booking-reassignment.integration.test.ts",

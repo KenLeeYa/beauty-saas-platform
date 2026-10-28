@@ -3,6 +3,7 @@ import type {
   notification_channel,
   notification_event_type,
 } from "@prisma/client";
+import {resolveLocale, type Locale} from "@/lib/i18n/locale";
 
 export type RecipientCandidate = {
   preference: customer_contact_type | null;
@@ -22,6 +23,7 @@ export type NotificationRecipient = {
 };
 
 export type NotificationPresentationInput = {
+  language?: string | null;
   eventType: notification_event_type;
   organizationName: string;
   locationName: string;
@@ -44,6 +46,25 @@ const eventLabels: Record<notification_event_type, string> = {
   REVIEW_REQUEST: "服務回饋邀請",
   REVISIT_REMINDER: "回訪提醒",
   NO_SHOW_NOTICE: "未到店通知",
+};
+
+const translatedEvents: Record<'en' | 'vi', Record<notification_event_type, string>> = {
+  en: {
+    BOOKING_CONFIRMED: 'Appointment confirmed', BOOKING_RESCHEDULED: 'Appointment rescheduled',
+    BOOKING_CANCELLED: 'Appointment cancelled', BOOKING_REMINDER_24H: 'Appointment reminder: 24 hours',
+    BOOKING_REMINDER_3H: 'Appointment reminder: 3 hours', BOOKING_REMINDER_1H: 'Appointment reminder: 1 hour',
+    BOOKING_PAYMENT_PENDING: 'Appointment deposit pending', BOOKING_PAYMENT_CONFIRMED: 'Deposit confirmed',
+    BOOKING_COMPLETED: 'Service completed', REVIEW_REQUEST: 'Share your feedback',
+    REVISIT_REMINDER: 'Time for your next visit', NO_SHOW_NOTICE: 'Missed appointment',
+  },
+  vi: {
+    BOOKING_CONFIRMED: 'Lịch hẹn đã được xác nhận', BOOKING_RESCHEDULED: 'Lịch hẹn đã được đổi',
+    BOOKING_CANCELLED: 'Lịch hẹn đã bị hủy', BOOKING_REMINDER_24H: 'Nhắc lịch hẹn trước 24 giờ',
+    BOOKING_REMINDER_3H: 'Nhắc lịch hẹn trước 3 giờ', BOOKING_REMINDER_1H: 'Nhắc lịch hẹn trước 1 giờ',
+    BOOKING_PAYMENT_PENDING: 'Đang chờ tiền đặt cọc', BOOKING_PAYMENT_CONFIRMED: 'Tiền đặt cọc đã được xác nhận',
+    BOOKING_COMPLETED: 'Dịch vụ đã hoàn tất', REVIEW_REQUEST: 'Mời bạn chia sẻ đánh giá',
+    REVISIT_REMINDER: 'Nhắc lịch quay lại', NO_SHOW_NOTICE: 'Thông báo vắng mặt',
+  },
 };
 
 export function selectNotificationRecipient(
@@ -106,12 +127,13 @@ export function selectNotificationRecipient(
 function formatBookingTime(
   startsAt: Date | null,
   timezone: string,
+  locale: Locale,
 ): string | null {
   if (!startsAt) {
     return null;
   }
 
-  return new Intl.DateTimeFormat("zh-TW", {
+  return new Intl.DateTimeFormat(locale, {
     timeZone: timezone,
     month: "long",
     day: "numeric",
@@ -136,25 +158,32 @@ export function renderNotification(input: NotificationPresentationInput): {
   text: string;
   html: string;
 } {
-  const eventLabel = eventLabels[input.eventType];
-  const bookingTime = formatBookingTime(input.startsAt, input.timezone);
+  const locale = resolveLocale(null, input.language ?? null);
+  const eventLabel = locale === 'zh-TW' ? eventLabels[input.eventType] : translatedEvents[locale][input.eventType];
+  const bookingTime = formatBookingTime(input.startsAt, input.timezone, locale);
+  const copy = {
+    'zh-TW': {time: '時間：', service: '項目：', location: '店家：',
+      greeting: `${input.customerName} 您好，${eventLabel}。`, help: '如需調整，請直接聯繫店家。'},
+    en: {time: 'Time: ', service: 'Service: ', location: 'Location: ',
+      greeting: `Hello ${input.customerName}, ${eventLabel}.`, help: 'To make changes, please contact the salon directly.'},
+    vi: {time: 'Thời gian: ', service: 'Dịch vụ: ', location: 'Chi nhánh: ',
+      greeting: `Xin chào ${input.customerName}, ${eventLabel}.`, help: 'Để thay đổi lịch hẹn, vui lòng liên hệ trực tiếp với cửa hàng.'},
+  }[locale];
   const details = [
-    bookingTime ? `時間：${bookingTime}` : null,
-    input.serviceName ? `項目：${input.serviceName}` : null,
-    `店家：${input.locationName}`,
+    bookingTime ? `${copy.time}${bookingTime}` : null,
+    input.serviceName ? `${copy.service}${input.serviceName}` : null,
+    `${copy.location}${input.locationName}`,
   ].filter((item): item is string => Boolean(item));
   const text = [
-    `${input.customerName} 您好，${eventLabel}。`,
+    copy.greeting,
     ...details,
-    "如需調整，請直接聯繫店家。",
+    copy.help,
   ].join("\n");
 
   return {
     subject: `${input.organizationName}｜${eventLabel}`,
     text,
-    html: `<p>${escapeHtml(input.customerName)} 您好，${escapeHtml(
-      eventLabel,
-    )}。</p><p>${details.map(escapeHtml).join("<br>")}</p><p>如需調整，請直接聯繫店家。</p>`,
+    html: `<div lang="${locale}"><p>${escapeHtml(copy.greeting)}</p><p>${details.map(escapeHtml).join("<br>")}</p><p>${escapeHtml(copy.help)}</p></div>`,
   };
 }
 

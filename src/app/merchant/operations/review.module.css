@@ -1,4 +1,24 @@
-.workspace { color:#202a32; }
+.workspace { color:#202a32; letter-spacing:0; overflow-wrap:anywhere; }
+.workspace :is(label,button,select,input,textarea) { min-width:0; max-width:100%; }
+.workspace button { white-space:normal; }
+.workspace button svg { flex:none; }
+.operationsShell { max-width:1080px; margin:0 auto; padding:16px 24px 24px; font-family:inherit; }
+.appNavigation { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; margin:12px 0 20px; padding:4px; background:#eef1f3; border-radius:8px; }
+.workspace .appNavigation button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; border:0; background:transparent; padding:6px 2px; min-width:0; min-height:60px; color:#53636f; font-size:12px; white-space:nowrap; }
+.workspace .appNavigation button span { max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+.workspace .appNavigation button[aria-current="page"] { background:#fff; color:#126e76; box-shadow:0 1px 3px #202a321a; font-weight:650; }
+.workspace .appNavigation .secondaryNavigation, .desktopNavigationLabel { display:none; }
+.mobileMore, .mobileNavigationLabel { display:block; }
+.mobileMore > button { width:100%; }
+.workspace .feedback { padding:12px 16px; background:#e7f3f2; border-left:3px solid #126e76; border-radius:4px; color:#164d50; }
+.operationsShell > section { max-width:860px; margin:0 auto; padding:8px 0 24px; }
+.operationsShell > section > details { margin-top:16px; border-top:1px solid #d8e0e6; padding:4px 0 12px; }
+.operationsShell > section > details > summary { font-weight:650; }
+.workspace .resultList { list-style:none; padding:0; margin:12px 0; }
+.resultList li { display:flex; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid #e1e7eb; }
+.reviewItem { padding:14px 0; border-bottom:1px solid #d8e0e6; overflow-wrap:anywhere; display:grid; gap:4px; }
+.reviewItem > div { color:#53636f; font-size:14px; }
+.reviewItem > button { justify-self:start; }
 .workspace h1 { font-size:24px; font-weight:650; margin:12px 0; }
 .workspace h2 { font-size:20px; font-weight:600; margin:16px 0 12px; }
 .workspace h3 { font-size:17px; font-weight:600; margin:20px 0 8px; }
@@ -7,7 +27,7 @@
 .workspace section { border-top:1px solid #d8e0e6; padding-top:8px; }
 .workspace section[hidden] { display:none; }
 .workspace label { display:block; font-size:14px; margin:12px 0; }
-.workspace input:not([type="checkbox"]), .workspace select, .workspace textarea { display:block; width:100%; min-height:44px; margin-top:6px; padding:8px 10px; border:1px solid #bdcbd4; border-radius:4px; background:#fff; color:#202a32; }
+.workspace input:not([type="checkbox"]), .workspace select, .workspace textarea { display:block; width:100%; min-height:44px; margin-top:6px; padding:10px 12px; border:1px solid #bdcbd4; border-radius:8px; background:#fff; color:#202a32; font-size:16px; }
 .workspace textarea { min-height:88px; resize:vertical; }
 .qualificationReview button { display:inline-flex; align-items:center; justify-content:center; gap:6px; }
 .qualificationReview button[type="submit"] { background:#202a32; color:#fff; }
@@ -16,7 +36,8 @@
 .workspace button { min-height:44px; padding:8px 12px; margin:4px 8px 4px 0; background:#fff; border:1px solid #bdcbd4; border-radius:4px; font-size:14px; }
 .workspace nav button { margin:0; }
 .workspace button:disabled { opacity:.55; cursor:not-allowed; }
-.workspace button:hover:not(:disabled) { border-color:#126e76; }
+@media (hover:hover) and (pointer:fine) { .workspace button:hover:not(:disabled) { border-color:#126e76; background:#f3f8f8; } }
+.workspace button:active:not(:disabled) { background:#e7f3f2; }
 .workspace :is(button,input,select,textarea,a):focus-visible { outline:2px solid #126e76; outline-offset:2px; }
 .workspace table { width:100%; table-layout:fixed; font-size:13px; border-collapse:collapse; margin:12px 0; }
 .workspace td, .workspace th { overflow-wrap:anywhere; padding:8px 4px; border-bottom:1px solid #d8e0e6; text-align:left; }
@@ -24,7 +45,12 @@
 .reassignmentDialog { width:calc(var(--reassignment-width, 100%) - 32px); max-width:720px; max-height:calc(var(--reassignment-height, 100dvh) - 32px); top:calc(var(--reassignment-top, 0px) + var(--reassignment-height, 100dvh) / 2); left:calc(var(--reassignment-left, 0px) + var(--reassignment-width, 100%) / 2); padding:0; gap:0; border-radius:8px; overflow:hidden; font-family:sans-serif; }
 .reassignmentDialog { transition:none; }
 .reassignmentForm { display:flex; flex-direction:column; min-height:0; max-height:inherit; }
-.reassignmentHeader { flex:none; padding:16px 20px 12px; border-bottom:1px solid #d8e0e6; overflow-wrap:anywhere; }
+.reassignmentHeader { flex:none; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:4px 8px; padding:12px 20px; border-bottom:1px solid #d8e0e6; overflow-wrap:anywhere; }
+.reassignmentHeader > div { grid-column:2; grid-row:1; max-width:150px; }
+.reassignmentHeader > h2 { grid-column:1; grid-row:1; }
+.reassignmentHeader > p { grid-column:1 / -1; }
+.reassignmentHeader label { margin:0; }
+.reassignmentHeader select { margin:0; padding:8px 4px; font-size:14px; }
 .reassignmentHeader h2 { font-size:20px; margin:0 0 6px; }
 .reassignmentHeader p { margin:0; }
 .reassignmentBody { min-height:0; overflow:auto; overscroll-behavior:contain; padding:12px 20px; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; }
@@ -35,6 +61,7 @@
 .reassignmentFields textarea { min-height:68px; resize:vertical; }
 .retainedArrangements { min-width:0; }
 .retainedArrangements h3 { margin:0 0 8px; }
+.retainedArrangements summary { font-weight:650; padding:8px 0; }
 .retainedArrangements ul { list-style:none; padding:0; margin:0; }
 .retainedArrangements li { display:grid; gap:3px; padding:8px 0; border-bottom:1px solid #e1e7eb; overflow-wrap:anywhere; font-size:13px; }
 .retainedArrangements time { color:#53636f; }
@@ -42,9 +69,19 @@
 .reassignmentActions button { margin:0; }
 .reassignmentError { grid-column:1 / -1; color:#9d2525 !important; }
 @media (max-width:639px) {
+  .operationsShell { padding:12px 16px 24px; }
+  .workspace .appNavigation button[aria-current="page"] { box-shadow:none; background:#e7f3f2; }
+  .operationsShell > section { padding-top:4px; }
+  .operationsShell table, .operationsShell tbody, .operationsShell tr, .operationsShell td { display:block; width:100%; }
+  .operationsShell thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+  .operationsShell tr { border-bottom:1px solid #d8e0e6; padding:12px 0; }
+  .operationsShell td { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; padding:5px 0; border:0; font-size:14px; }
+  .operationsShell td::before { content:attr(data-label); flex:0 0 30%; color:#64717b; font-size:12px; }
   .reassignmentDialog { width:var(--reassignment-width, 100%); max-width:100%; height:var(--reassignment-height, 100dvh); max-height:var(--reassignment-height, 100dvh); border-radius:0; }
   .reassignmentForm { height:100%; }
   .reassignmentHeader { padding:max(12px,env(safe-area-inset-top)) 16px 10px; }
   .reassignmentBody { flex:1; display:block; padding:12px 16px; }
   .reassignmentActions { padding-left:16px; padding-right:16px; }
+  /* Physical Android IMEs can cover the visual viewport's final pixels. */
+  .reassignmentDialog[data-keyboard="true"] .reassignmentActions { padding-bottom:max(40px,env(safe-area-inset-bottom)); }
 }

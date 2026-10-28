@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { acknowledgeDispatchException, listBookingExceptions } from "@/server/booking/exception-queue";
-import { AppError } from "@/server/http/errors";
+import { mobileJsonError } from "@/server/http/response";
 import { requireMobileBookingContext } from "@/server/mobile/context";
 import { assertSameOrigin, getRequestId } from "@/server/security/request";
 
@@ -15,8 +15,7 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({ items:await listBookingExceptions(actor) },
       { headers:{ "Cache-Control":"no-store" } });
   } catch (error) {
-    return Response.json({ error:error instanceof Error ? error.message : "Queue unavailable" },
-      { status:error instanceof AppError ? error.status : 400 });
+    return mobileJsonError(error, request);
   }
 }
 
@@ -28,7 +27,6 @@ export async function POST(request: Request): Promise<Response> {
     await acknowledgeDispatchException(actor,input.claimId,input.reason,getRequestId(request));
     return Response.json({ reviewed:true });
   } catch (error) {
-    return Response.json({ error:error instanceof Error ? error.message : "Review unavailable" },
-      { status:error instanceof AppError ? error.status : 400 });
+    return mobileJsonError(error, request);
   }
 }

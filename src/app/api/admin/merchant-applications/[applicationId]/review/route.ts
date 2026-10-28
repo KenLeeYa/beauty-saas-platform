@@ -55,6 +55,6 @@ export async function PATCH(
       },
     );
   } catch (error) {
-    return jsonError(error, requestId);
+    return jsonError(error, requestId, request);
   }
 }

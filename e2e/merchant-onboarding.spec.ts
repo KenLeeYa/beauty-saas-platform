@@ -118,24 +118,15 @@ test("merchant application reaches public go-live", async (
     page.getByRole("heading", { name: "開店設定" }),
   ).toBeVisible();
 
-  await page
-    .getByRole("button", { name: "儲存營業時間" })
-    .click();
-  await expect(
-    page.getByRole("button", { name: "儲存營業時間" }),
-  ).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "儲存預約政策" })
-    .click();
-  await expect(
-    page.getByRole("button", { name: "儲存預約政策" }),
-  ).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "確認通知設定" })
-    .click();
-  await expect(
-    page.getByRole("button", { name: "確認通知設定" }),
-  ).toHaveCount(0);
+  await page.getByRole("button", { name: /預約設定/ }).click();
+  for (const label of ["營業時間", "預約、取消與訂金規則", "通知通道"]) {
+    await page.getByRole("button", { name: new RegExp(label) }).click();
+    const setupDialog = page.getByRole("dialog");
+    await setupDialog.getByRole("button", { name: "儲存", exact: true }).click();
+    await expect(setupDialog.getByRole("status")).toHaveText("開店設定已儲存。");
+    await setupDialog.getByRole("button", { name: "關閉", exact: true }).click();
+    await expect(page.getByRole("button", { name: new RegExp(label) })).toContainText("已完成");
+  }
 
   const scope = `organization=${encodeURIComponent(
     organizationSlug,
@@ -150,12 +141,18 @@ test("merchant application reaches public go-live", async (
   await expect(page.getByText("QA 臉部保養")).toBeVisible();
 
   await page.goto(`/merchant/staff?${scope}`);
+  await page.getByRole("button", { name: "技能項目", exact: true }).click();
+  const skillDialog = page.getByRole("dialog");
+  await skillDialog.getByLabel("技能名稱", { exact: true }).fill("臉部保養");
+  await skillDialog.getByRole("button", { name: "新增技能", exact: true }).click();
+  await expect(skillDialog.getByRole("status")).toContainText("技能已新增");
+  await skillDialog.getByRole("button", { name: "關閉", exact: true }).click();
   await page
     .getByRole("button", { name: "新增服務人員" })
     .click();
   await page.getByLabel("顯示名稱").fill("QA 美容師");
   await page.getByLabel("職稱").fill("美容師");
-  await page.getByLabel("技能（以逗號分隔）").fill("臉部保養");
+  await page.getByRole("checkbox", { name: "臉部保養", exact: true }).check();
   await page.getByRole("button", { name: "儲存" }).click();
   await expect(page.getByText("QA 美容師")).toBeVisible();
 
@@ -170,16 +167,20 @@ test("merchant application reaches public go-live", async (
   await expect(page.getByText("QA 療程室")).toBeVisible();
 
   await page.goto(`/merchant/setup?${scope}`);
-  const testBookingButton = page.getByRole("button", {
+  await page.getByRole("button", { name: /開放預約/ }).click();
+  await page.getByRole("button", { name: /測試預約/ }).click();
+  const testBookingButton = page.getByRole("dialog").getByRole("button", {
     name: "建立並完成測試預約",
   });
   await expect(testBookingButton).toBeEnabled();
   await testBookingButton.click();
-  await expect(page.getByText("測試預約已完成。")).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("status")).toHaveText("測試預約已完成。");
+  await page.getByRole("dialog").getByRole("button", { name: "關閉", exact: true }).click();
 
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "正式上線" }).click();
-  await expect(page.getByText("公開預約已正式開放。")).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "確認開放預約" }).click();
+  await expect(page.getByRole("dialog").getByRole("status")).toHaveText("公開預約已正式開放。");
+  await page.getByRole("dialog").getByRole("button", { name: "關閉", exact: true }).click();
   await expect(
     page.getByRole("link", { name: "開啟公開預約" }),
   ).toBeVisible();

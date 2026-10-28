@@ -1,5 +1,7 @@
 "use client";
 
+import { useLanguage } from "@/components/language-provider";
+
 import { RotateCcw, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
@@ -25,7 +27,7 @@ const featureLabels: Readonly<Record<string, string>> = {
   BUSINESS_HOURS: "營業時間",
   RESOURCE_MANAGEMENT: "空間與設備",
   LINE_NOTIFICATIONS: "LINE 通知",
-  EMAIL_NOTIFICATIONS: "Email 通知",
+  EMAIL_NOTIFICATIONS: "電子郵件通知",
   DEPOSITS: "訂金",
   CANCELLATION_RULES: "取消規則",
   MULTI_LOCATION: "多分店",
@@ -35,12 +37,19 @@ const featureLabels: Readonly<Record<string, string>> = {
   CUSTOM_BRANDING: "自訂品牌",
   AUDIT_VIEWER: "稽核紀錄",
   API_ACCESS: "API 存取",
-  WEBHOOK_ACCESS: "Webhook",
+  WEBHOOK_ACCESS: "事件通知介接",
   CUSTOM_DOMAIN: "自訂網域",
   WHITE_LABEL: "白牌",
   MEMBERSHIPS_PACKAGES: "會員與套票",
   AI_ASSISTANT: "AI 助理",
   MARKETPLACE: "市集",
+};
+const statusLabels: Readonly<Record<string, string>> = {
+  TRIALING: "試用中", ACTIVE: "使用中", PAST_DUE: "付款逾期", SUSPENDED: "已停用",
+  GRACE_PERIOD: "寬限期", CANCELLED: "已取消", CANCELED: "已取消", EXPIRED: "已到期", INCOMPLETE: "待完成",
+};
+const overrideLabels: Readonly<Record<string, string>> = {
+  ALLOW: "允許使用", DENY: "停用", LIMIT: "調整上限",
 };
 
 function csrfToken(): string {
@@ -55,6 +64,7 @@ export function OrganizationFeatureControls({
 }: {
   data: AdminOrganizationFeaturesData;
 }) {
+  const { t, errorText } = useLanguage();
   const router = useRouter();
   const [selectedFeature, setSelectedFeature] = useState(
     data.features[0]?.key ?? "ONLINE_BOOKING",
@@ -85,14 +95,14 @@ export function OrganizationFeatureControls({
       const payload = (await response.json()) as ApiPayload;
       if (!response.ok || !payload.data?.success) {
         throw new Error(
-          payload.error?.message ?? "功能權益更新失敗。",
+          payload.error?.message ?? t("功能權益更新失敗。"),
         );
       }
       setFeedback("功能權益已更新。");
       router.refresh();
     } catch (cause) {
       setError(
-        cause instanceof Error
+        cause instanceof Error && /\p{Script=Han}/u.test(cause.message)
           ? cause.message
           : "功能權益更新失敗。",
       );
@@ -119,15 +129,15 @@ export function OrganizationFeatureControls({
   }
 
   return (
-    <div className="space-y-7">
+    <div className="platform-surface space-y-7">
       <section className="border-y border-slate-200 bg-white px-5 py-5">
         <h2 className="text-lg font-semibold text-ink">
           {data.organization.name}
         </h2>
         <p className="mt-1 text-sm text-slate-500">
           {data.subscription
-            ? `${data.subscription.planName} v${data.subscription.planVersion} · ${data.subscription.status}`
-            : "尚未建立訂閱"}
+            ? `${data.subscription.planName} · ${t("版本")} ${data.subscription.planVersion} · ${t(statusLabels[data.subscription.status] ?? "待確認")}`
+            : t("尚未建立訂閱")}
         </p>
       </section>
 
@@ -135,10 +145,10 @@ export function OrganizationFeatureControls({
         className="border-y border-slate-200 bg-white px-5 py-6"
         onSubmit={submit}
       >
-        <h2 className="font-semibold text-ink">新增或取代功能覆寫</h2>
+        <h2 className="font-semibold text-ink">{t("新增或取代功能覆寫")}</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <label>
-            <span className="text-sm font-medium text-slate-700">功能</span>
+            <span className="text-sm font-medium text-slate-700">{t("功能")}</span>
             <select
               className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3"
               value={selectedFeature}
@@ -150,15 +160,14 @@ export function OrganizationFeatureControls({
             >
               {data.features.map((feature) => (
                 <option key={feature.key} value={feature.key}>
-                  {featureLabels[feature.key] ?? feature.key}
+                  {t(featureLabels[feature.key] ?? "其他功能")}
                 </option>
               ))}
             </select>
           </label>
           <label>
             <span className="text-sm font-medium text-slate-700">
-              覆寫方式
-            </span>
+              {t("覆寫方式")}</span>
             <select
               className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3"
               value={overrideType}
@@ -168,15 +177,14 @@ export function OrganizationFeatureControls({
                 )
               }
             >
-              <option value="ALLOW">允許</option>
-              <option value="DENY">停用</option>
-              <option value="LIMIT">調整上限</option>
+              <option value="ALLOW">{t("允許")}</option>
+              <option value="DENY">{t("停用")}</option>
+              <option value="LIMIT">{t("調整上限")}</option>
             </select>
           </label>
           <label>
             <span className="text-sm font-medium text-slate-700">
-              上限
-            </span>
+              {t("上限")}</span>
             <input
               className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3 disabled:bg-slate-50"
               disabled={overrideType !== "LIMIT"}
@@ -188,8 +196,7 @@ export function OrganizationFeatureControls({
           </label>
           <label>
             <span className="text-sm font-medium text-slate-700">
-              到期時間
-            </span>
+              {t("到期時間")}</span>
             <input
               className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
               name="expiresAt"
@@ -197,7 +204,7 @@ export function OrganizationFeatureControls({
             />
           </label>
           <label className="md:col-span-2 lg:col-span-4">
-            <span className="text-sm font-medium text-slate-700">原因</span>
+            <span className="text-sm font-medium text-slate-700">{t("原因")}</span>
             <input
               className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3"
               maxLength={500}
@@ -208,73 +215,72 @@ export function OrganizationFeatureControls({
           </label>
         </div>
         <button
-          className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-ink px-4 text-sm font-semibold text-white disabled:opacity-50"
+          className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-md bg-ink px-4 text-sm font-semibold text-white disabled:opacity-50"
           disabled={isSubmitting}
           type="submit"
         >
           <Save aria-hidden="true" className="h-4 w-4" />
-          儲存覆寫
-        </button>
+          {t("儲存覆寫")}</button>
       </form>
 
       <div aria-live="polite">
         {feedback ? (
-          <p className="text-sm font-medium text-teal">{feedback}</p>
+          <p className="text-sm font-medium text-teal">{t(feedback)}</p>
         ) : null}
         {error ? (
           <p
             className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
             role="alert"
           >
-            {error}
+            {errorText(error)}
           </p>
         ) : null}
       </div>
 
       <section>
-        <h2 className="text-lg font-semibold text-ink">方案與有效權益</h2>
-        <div className="mt-3 overflow-x-auto border-y border-slate-200 bg-white">
-          <table className="w-full min-w-[760px] text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500">
+        <h2 className="text-lg font-semibold text-ink">{t("方案與有效權益")}</h2>
+        <div className="mt-3 border-y border-slate-200 bg-white">
+          <table className="block w-full text-left text-sm md:table">
+            <thead className="hidden border-b border-slate-200 bg-slate-50 text-xs text-slate-500 md:table-header-group">
               <tr>
-                <th className="px-4 py-3 font-semibold">功能</th>
-                <th className="px-4 py-3 font-semibold">方案</th>
-                <th className="px-4 py-3 font-semibold">方案上限</th>
-                <th className="px-4 py-3 font-semibold">有效覆寫</th>
-                <th className="px-4 py-3 font-semibold">操作</th>
+                <th className="px-4 py-3 font-semibold">{t("功能")}</th>
+                <th className="px-4 py-3 font-semibold">{t("方案")}</th>
+                <th className="px-4 py-3 font-semibold">{t("方案上限")}</th>
+                <th className="px-4 py-3 font-semibold">{t("有效覆寫")}</th>
+                <th className="px-4 py-3 font-semibold">{t("操作")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="block divide-y divide-slate-100 md:table-row-group">
               {data.features.map((feature) => (
-                <tr key={feature.key}>
-                  <td className="px-4 py-3 font-medium text-ink">
-                    {featureLabels[feature.key] ?? feature.key}
+                <tr key={feature.key} className="block py-3 md:table-row md:py-0">
+                  <td className="block px-4 py-2 font-semibold break-words text-ink md:table-cell md:py-3">
+                    {t(featureLabels[feature.key] ?? "其他功能")}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {feature.planEnabled ? "啟用" : "停用"}
+                  <td className="flex justify-between gap-3 px-4 py-2 text-slate-600 md:table-cell md:py-3">
+                    <span className="md:hidden">{t("方案")}</span>
+                    {feature.planEnabled ? t("啟用") : t("停用")}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {feature.planLimit ?? "無"}
-                    {feature.softLimit ? "（軟性）" : ""}
+                  <td className="flex justify-between gap-3 px-4 py-2 text-slate-600 md:table-cell md:py-3">
+                    <span className="md:hidden">{t("方案上限")}</span>
+                    <span>{feature.planLimit ?? t("無")}{feature.softLimit ? t("（軟性）") : ""}</span>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td className="flex justify-between gap-3 px-4 py-2 text-slate-600 md:table-cell md:py-3">
+                    <span className="md:hidden">{t("有效覆寫")}</span>
                     {feature.activeOverride
-                      ? `${feature.activeOverride.type}${
+                      ? `${t(overrideLabels[feature.activeOverride.type] ?? "待確認")}${
                           feature.activeOverride.limitValue !== null
                             ? ` · ${feature.activeOverride.limitValue}`
                             : ""
                         }`
-                      : "無"}
+                      : t("無")}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="block px-4 py-2 md:table-cell md:py-3">
                     {feature.activeOverride ? (
                       <button
-                        aria-label={`撤銷 ${
-                          featureLabels[feature.key] ?? feature.key
-                        } 覆寫`}
-                        className="inline-flex h-9 items-center gap-2 rounded-md text-sm font-semibold text-red-700 disabled:opacity-50"
+                        aria-label={`${t("撤銷覆寫")} ${t(featureLabels[feature.key] ?? "其他功能")}`}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm font-semibold text-red-700 disabled:opacity-50"
                         disabled={isSubmitting}
-                        title="撤銷覆寫"
+                        title={t("撤銷覆寫")}
                         type="button"
                         onClick={() =>
                           void mutate({
@@ -287,10 +293,9 @@ export function OrganizationFeatureControls({
                           aria-hidden="true"
                           className="h-4 w-4"
                         />
-                        撤銷
-                      </button>
+                        {t("撤銷")}</button>
                     ) : (
-                      <span className="text-slate-400">—</span>
+                      <span className="hidden text-slate-400 md:inline">{t("無")}</span>
                     )}
                   </td>
                 </tr>

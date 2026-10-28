@@ -21,5 +21,5 @@ export async function GET(request: NextRequest): Promise<Response> {
       organizationSlug:scope.organization,locationSlug:scope.location });
     return jsonSuccess({ consent:await getMarketingConsentReview(context,customerId) },
       { headers:{ "Cache-Control":"no-store" } });
-  } catch(error) { return jsonError(error,requestId); }
+  } catch(error) { return jsonError(error,requestId, request); }
 }

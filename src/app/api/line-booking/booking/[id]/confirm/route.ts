@@ -1,3 +1,4 @@
+import { publicMessage } from '@/lib/line-booking/validation';
 import {withDb} from '@/lib/line-booking/db';
 import {actor} from '@/lib/line-booking/auth';
 import {requireSameOrigin} from '@/lib/line-booking/request-security';
@@ -22,5 +23,5 @@ export async function POST(request:Request,{params}: {params:Promise<{id:string}
       } catch(error) {await client.query('ROLLBACK');throw error;}
     });
     return Response.json(result);
-  } catch(error) {const detail=message(error);return Response.json({error:detail},{status:/authentication|session/.test(detail)?401:/forbidden/.test(detail)?403:400});}
+  } catch(error) {const detail=message(error);return Response.json({error:publicMessage(error, request)},{status:/authentication|session/.test(detail)?401:/forbidden/.test(detail)?403:400});}
 }

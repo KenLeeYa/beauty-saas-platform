@@ -1,9 +1,11 @@
 "use client";
 
+import {useLanguage} from "@/components/language-provider";
+
 import { CalendarDays, Check, Play, UserCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { LogoutButton } from "./logout-button";
+import { WorkspaceHeader } from "./workspace-header";
 import { MonthCalendar } from "./month-calendar";
 import {
   formatLocalDateKey,
@@ -46,6 +48,7 @@ export function StaffWorkspace({
 }: {
   initialData: StaffWorkspaceData;
 }) {
+  const {t, errorText} = useLanguage();
   const [data, setData] = useState(initialData);
   const [selectedDate, setSelectedDate] = useState(() =>
     formatLocalDateKey(new Date(), data.location.timezone),
@@ -123,34 +126,18 @@ export function StaffWorkspace({
   }
 
   return (
-    <main className="min-h-screen bg-mist">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div>
-            <p className="text-xs font-semibold text-teal">
-              {data.organization.name}
-            </p>
-            <h1 className="mt-1 text-xl font-semibold text-ink">
-              {data.location.name} · 我的預約
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <p className="hidden text-sm font-semibold text-ink sm:block">
-              {data.session.displayName}
-            </p>
-            <LogoutButton />
-          </div>
-        </div>
-      </header>
+    <main className="staff-workspace min-h-screen bg-mist">
+      <WorkspaceHeader title={data.location.name} subtitle={`${data.organization.name} · ${data.session.displayName}`} disabled={pendingId !== null} />
 
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)] lg:gap-6 lg:py-6">
+        <h1 className="text-xl font-semibold text-ink lg:col-span-2">{data.location.name} {t("· 我的預約")}</h1>
         <section className="order-2 min-w-0 lg:order-1">
           <div className="mb-3 flex items-center gap-2">
             <CalendarDays
               aria-hidden="true"
               className="h-5 w-5 text-teal"
             />
-            <h2 className="text-lg font-semibold text-ink">月行事曆</h2>
+            <h2 className="text-lg font-semibold text-ink"> {t("月行事曆")} </h2>
           </div>
           <MonthCalendar
             audience="merchant"
@@ -161,20 +148,25 @@ export function StaffWorkspace({
         </section>
 
         <section className="order-1 min-w-0 lg:order-2">
+          <label className="mb-4 grid gap-1 text-sm font-medium lg:hidden">
+            {t('查看日期')}
+            <input type="date" className="min-h-11 min-w-0 w-full rounded-md border border-slate-300 bg-white px-3 text-base"
+              min={data.calendarDays[0]?.date} max={data.calendarDays.at(-1)?.date}
+              value={selectedDate} onChange={event => {
+                if (data.calendarDays.some(day => day.date === event.target.value)) setSelectedDate(event.target.value);
+              }} />
+          </label>
           <div className="mb-3">
             <h2 className="text-lg font-semibold text-ink">
-              {selectedDate} 預約
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              僅顯示指派給你的服務
-            </p>
+              {selectedDate} {t("預約")} </h2>
+            <p className="mt-1 text-sm text-slate-500"> {t("僅顯示指派給你的服務")} </p>
           </div>
           {error ? (
             <p
               role="alert"
               className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
             >
-              {error}
+              {errorText(error)}
             </p>
           ) : null}
           <div className="space-y-3">
@@ -184,7 +176,7 @@ export function StaffWorkspace({
                 className="rounded-md border border-slate-200 bg-white p-3 sm:p-4"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0 break-words">
                     <p className="text-base font-semibold text-ink">
                         {formatLocalTime(
                         booking.startsAt,
@@ -196,8 +188,8 @@ export function StaffWorkspace({
                       {booking.serviceName} · {booking.variantName}
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-sm bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                    {statusLabels[booking.status] ?? booking.status}
+                  <span className="max-w-[40%] shrink-0 break-words rounded-sm bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                    {t(statusLabels[booking.status] ?? booking.status)}
                   </span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -214,9 +206,7 @@ export function StaffWorkspace({
                         <UserCheck
                           aria-hidden="true"
                           className="h-4 w-4"
-                        />
-                        報到
-                      </button>
+                        /> {t("報到")} </button>
                       <button
                         className="h-11 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 disabled:cursor-wait disabled:opacity-60 sm:h-9"
                         disabled={pendingId === booking.id}
@@ -224,9 +214,7 @@ export function StaffWorkspace({
                         onClick={() =>
                           void updateStatus(booking, "NO_SHOW")
                         }
-                      >
-                        未到店
-                      </button>
+                      > {t("未到店")} </button>
                     </>
                   ) : null}
                   {booking.status === "CHECKED_IN" ? (
@@ -238,9 +226,7 @@ export function StaffWorkspace({
                         void updateStatus(booking, "IN_SERVICE")
                       }
                     >
-                      <Play aria-hidden="true" className="h-4 w-4" />
-                      開始服務
-                    </button>
+                      <Play aria-hidden="true" className="h-4 w-4" /> {t("開始服務")} </button>
                   ) : null}
                   {booking.status === "IN_SERVICE" ? (
                     <button
@@ -251,19 +237,15 @@ export function StaffWorkspace({
                         void updateStatus(booking, "COMPLETED")
                       }
                     >
-                      <Check aria-hidden="true" className="h-4 w-4" />
-                      完成服務
-                    </button>
+                      <Check aria-hidden="true" className="h-4 w-4" /> {t("完成服務")} </button>
                   ) : null}
                 </div>
               </article>
             ))}
             {dayBookings.length === 0 ? (
               <div className="border-y border-slate-200 bg-white px-4 py-10 text-center">
-                <p className="font-semibold text-ink">當日沒有預約</p>
-                <p className="mt-2 text-sm text-slate-500">
-                  可從月曆切換其他日期。
-                </p>
+                <p className="font-semibold text-ink"> {t("當日沒有預約")} </p>
+                <p className="mt-2 text-sm text-slate-500"> {t("可從月曆切換其他日期。")} </p>
               </div>
             ) : null}
           </div>

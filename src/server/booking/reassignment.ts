@@ -91,14 +91,17 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
       join public.location_services service
         on service.id = assignment.location_service_id
        and service.organization_id = assignment.organization_id
+      join public.staff_profiles staff on staff.id=assignment.staff_profile_id
+        and staff.organization_id=assignment.organization_id
       where service.organization_id = ${input.context.organization.id}::uuid
         and service.location_id = ${location.id}::uuid
         and service.service_variant_id = ${segment.service_variant_id}::uuid
         and assignment.staff_profile_id = ${target.id}::uuid
         and service.is_active and assignment.is_active
+        and staff.is_active and service.required_skills <@ staff.skills
         and assignment.effective_from <= ${segment.starts_at}
         and (assignment.effective_until is null or assignment.effective_until > ${segment.starts_at})
-      for share of assignment
+      for share of assignment, service, staff
     `);
     if (!qualified[0]) throw new AppError("CONFLICT", "此美容師的資格未涵蓋預約時間，請選擇其他人員", 409);
     const schedule = await transaction.$queryRaw<{ allowed: boolean }[]>(Prisma.sql`
@@ -169,7 +172,13 @@ export async function reassignFutureBooking(input: { context: OrganizationContex
       organization_id: input.context.organization.id, location_id: location.id,
       booking_id: input.bookingId, booking_segment_id: segment.id,
       staff_profile_id: target.id, starts_at: old.starts_at, ends_at: old.ends_at,
-    } });
+    } }).catch((error: unknown) => {
+      if (error instanceof Prisma.PrismaClientUnknownRequestError &&
+          error.message.includes('23P01') && error.message.includes('booking_staff_allocations_no_overlap')) {
+        throw new AppError('CONFLICT', '此美容師當時已有安排，請選擇其他人員或稍後重試', 409);
+      }
+      throw error;
+    });
     await transaction.booking_staff_allocations.delete({ where: { id: old.id } });
     if (segment.assigned_staff_id === old.staff_profile_id) {
       await transaction.booking_segments.update({ where: { id: segment.id }, data: {

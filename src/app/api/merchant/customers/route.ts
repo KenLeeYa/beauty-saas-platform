@@ -17,6 +17,19 @@ import {
   updateMerchantCustomerSchema,
 } from "@/server/merchant/schemas";
 import { getRequestId } from "@/server/security/request";
+import {directoryQuerySchema, listMerchantCustomers} from "@/server/merchant/customer-directory";
+
+export async function GET(request: NextRequest) {
+  const requestId = getRequestId(request);
+  try {
+    const session = await requireRequestSession(request);
+    const scope = merchantScopeSchema.parse({organization:request.nextUrl.searchParams.get("organization"),location:request.nextUrl.searchParams.get("location")});
+    const context = await resolveMerchantContext({session, organizationSlug:scope.organization, locationSlug:scope.location});
+    await requireModule(context,"CUSTOMER_CRM");
+    const input = directoryQuerySchema.parse(Object.fromEntries(request.nextUrl.searchParams));
+    return jsonSuccess(await listMerchantCustomers(context,input), {headers:{"x-request-id":requestId,"cache-control":"no-store"}});
+  } catch(error) {return jsonError(error,requestId,request);}
+}
 
 export async function POST(request: NextRequest) {
   const requestId = getRequestId(request);
@@ -41,7 +54,7 @@ export async function POST(request: NextRequest) {
       { status: 201, headers: { "x-request-id": requestId } },
     );
   } catch (error) {
-    return jsonError(error, requestId);
+    return jsonError(error, requestId, request);
   }
 }
 
@@ -68,6 +81,6 @@ export async function PATCH(request: NextRequest) {
       { headers: { "x-request-id": requestId } },
     );
   } catch (error) {
-    return jsonError(error, requestId);
+    return jsonError(error, requestId, request);
   }
 }

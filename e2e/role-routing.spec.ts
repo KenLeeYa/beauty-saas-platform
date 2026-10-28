@@ -64,12 +64,15 @@ test("merchant account enters the merchant workspace", async ({
   await customerForm.getByRole("button", { name: "建立顧客" }).click();
   await expect(page.getByRole("status")).toContainText("顧客已建立");
 
+  await page.getByText("管理標籤", {exact: true}).click();
   const tagForm = page.getByRole("form", { name: "建立顧客標籤" });
   await tagForm.getByLabel("新標籤名稱").fill(tagName);
   await tagForm.getByRole("button", { name: "建立標籤" }).click();
   await expect(page.getByRole("status")).toContainText("顧客標籤已建立");
 
-  const customerRow = page.locator("article").filter({ hasText: customerName });
+  await page.getByPlaceholder("搜尋姓名、手機或標籤").fill(customerName);
+  await page.getByRole("button", {name: `顧客詳細資料 ${customerName}`, exact: true}).click();
+  const customerRow = page.getByRole("dialog", {name: "顧客詳細資料", exact: true});
   await expect(customerRow).toBeVisible();
   await customerRow.getByText("顧客紀錄與標籤").click();
   await customerRow
@@ -128,8 +131,10 @@ test("customer account enters the public booking calendar", async ({
   await expect(
     page.getByRole("heading", { level: 1, name: "選擇服務" }),
   ).toBeVisible();
+  await page.getByRole("button", {name: "下一步", exact: true}).click();
+  await page.getByRole("button", {name: "下一步", exact: true}).click();
   await expect(
-    page.getByRole("heading", { level: 2, name: "選擇日期與時間" }),
+    page.getByRole("heading", { level: 1, name: "選擇日期與時間" }),
   ).toBeVisible();
   await expect(
     page.getByRole("region", { name: "月曆" }),

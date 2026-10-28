@@ -23,6 +23,7 @@ export async function isStaffQualified(locationId: string, staffProfileId: strin
       where service.location_id = ${locationId}::uuid
         and service.service_variant_id = ${serviceVariantId}::uuid
         and service.is_active and assignment.is_active and staff.is_active
+        and service.required_skills <@ staff.skills
         and assignment.staff_profile_id = ${staffProfileId}::uuid
         and assignment.effective_from <= ${at}
         and (assignment.effective_until is null or assignment.effective_until > ${at})
@@ -32,6 +33,32 @@ export async function isStaffQualified(locationId: string, staffProfileId: strin
     ) as qualified
   `);
   return rows[0]?.qualified ?? false;
+}
+
+export async function assertBookableStaff(transaction: Prisma.TransactionClient, input: {
+  organizationId: string; locationId: string; serviceVariantId: string; staffProfileId: string; startsAt: Date;
+}): Promise<void> {
+  const rows = await transaction.$queryRaw<{id: string}[]>(Prisma.sql`
+    select assignment.id from public.service_staff_assignments assignment
+    join public.location_services service on service.id=assignment.location_service_id
+      and service.organization_id=assignment.organization_id
+    join public.staff_profiles staff on staff.id=assignment.staff_profile_id
+      and staff.organization_id=service.organization_id
+    where service.organization_id=${input.organizationId}::uuid
+      and service.location_id=${input.locationId}::uuid
+      and service.service_variant_id=${input.serviceVariantId}::uuid
+      and staff.id=${input.staffProfileId}::uuid
+      and service.is_active and service.online_booking_enabled and staff.is_active and staff.public_visible
+      and assignment.is_active and assignment.online_booking_enabled
+      and assignment.effective_from <= ${input.startsAt}
+      and (assignment.effective_until is null or assignment.effective_until > ${input.startsAt})
+      and service.required_skills <@ staff.skills
+      and exists (select 1 from public.staff_location_assignments branch
+        where branch.organization_id=service.organization_id and branch.location_id=service.location_id
+          and branch.staff_profile_id=staff.id and branch.is_active)
+    for share of assignment, service, staff
+  `);
+  if (!rows[0]) throw new AppError("CONFLICT", "服務人員資格已變更，請重新選擇人員與時段。", 409);
 }
 
 export async function setStaffCapability(input: {

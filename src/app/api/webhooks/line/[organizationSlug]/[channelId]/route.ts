@@ -20,5 +20,5 @@ export async function POST(request:NextRequest,{params}: {
       channelId:route.channelId,body,
       signature:request.headers.get('x-line-signature')??''});
     return jsonSuccess(result,{headers:{'x-request-id':requestId}});
-  } catch(error) {return jsonError(error,requestId);}
+  } catch(error) {return jsonError(error,requestId, request);}
 }

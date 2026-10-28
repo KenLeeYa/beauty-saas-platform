@@ -1,4 +1,5 @@
-import {message,storeQuery} from '@/lib/line-booking/validation';
+import { publicMessage } from '@/lib/line-booking/validation';
+import {storeQuery} from '@/lib/line-booking/validation';
 import {withDb} from '@/lib/line-booking/db';
 import {randomState,seal,cookie} from '@/lib/line-booking/session';
 import {localDemoEnabled} from '@/lib/line-booking/local-demo';
@@ -16,5 +17,5 @@ export async function GET(request: Request) {
     const url=new URL('https://access.line.me/oauth2/v2.1/authorize');
     url.search=new URLSearchParams({response_type:'code',client_id:store.line_channel_id,redirect_uri:redirect,state,scope:'openid profile',nonce}).toString();
     return new Response(null,{status:302,headers:{location:url.toString(),'set-cookie':cookie('line_booking_oauth',seal({store:store.id,slug,state,nonce,exp:Date.now()+600000}),600)}});
-  } catch(error) {if(error instanceof AppError)return Response.json({error:error.message},{status:error.status});return Response.json({error:message(error)},{status:400});}
+  } catch(error) {if(error instanceof AppError)return Response.json({error:publicMessage(error, request)},{status:error.status});return Response.json({error:publicMessage(error, request)},{status:400});}
 }

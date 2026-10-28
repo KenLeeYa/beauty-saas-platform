@@ -1,5 +1,8 @@
 "use client";
 
+import {useLanguage} from "@/components/language-provider";
+import {useMerchantPagination} from "@/components/merchant-sheet";
+
 import {
   Bell,
   CircleAlert,
@@ -50,13 +53,14 @@ function formatDeliveryTime(value: string, timezone: string): string {
 }
 
 function DeliveryStatus({ delivery }: { delivery: Delivery }) {
+  const {t} = useLanguage();
   return (
     <span
       className={`rounded-md px-2 py-1 text-xs font-semibold ${
         deliveryClasses[delivery.status] ?? "bg-slate-100 text-slate-600"
       }`}
     >
-      {deliveryLabels[delivery.status] ?? delivery.status}
+      {t(deliveryLabels[delivery.status] ?? delivery.status)}
     </span>
   );
 }
@@ -70,6 +74,7 @@ function RetryButton({
   busy: boolean;
   onRetry: (deliveryId: string) => Promise<void>;
 }) {
+  const {t} = useLanguage();
   const retryable = ["FAILED", "DEAD_LETTER"].includes(delivery.jobStatus);
   if (!retryable) {
     return null;
@@ -81,9 +86,7 @@ function RetryButton({
       type="button"
       onClick={() => void onRetry(delivery.id)}
     >
-      <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
-      立即重試
-    </button>
+      <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" /> {t("立即重試")} </button>
   );
 }
 
@@ -102,9 +105,11 @@ export function NotificationHealthPanel({
   isSubmitting: boolean;
   onRetry: (deliveryId: string) => Promise<void>;
 }) {
+  const {t} = useLanguage();
   const integrationByChannel = new Map(
     integrations.map((integration) => [integration.channel, integration]),
   );
+  const deliveryPage = useMerchantPagination(deliveries);
   const healthItems = [
     { label: "等待中", value: health.pending, icon: Clock3 },
     { label: "處理中", value: health.processing, icon: Send },
@@ -117,9 +122,7 @@ export function NotificationHealthPanel({
       <section aria-labelledby="notification-health-heading">
         <div className="mb-3 flex items-center gap-2">
           <Bell aria-hidden="true" className="h-5 w-5 text-teal" />
-          <h2 className="font-semibold text-ink" id="notification-health-heading">
-            通知健康狀態
-          </h2>
+          <h2 className="font-semibold text-ink" id="notification-health-heading"> {t("通知健康狀態")} </h2>
         </div>
         <div className="grid grid-cols-2 gap-px overflow-hidden border-y border-slate-200 bg-slate-200 sm:grid-cols-4">
           {healthItems.map((item) => {
@@ -128,7 +131,7 @@ export function NotificationHealthPanel({
               <div className="bg-white px-4 py-4" key={item.label}>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-semibold text-slate-500">
-                    {item.label}
+                    {t(item.label)}
                   </p>
                   <Icon aria-hidden="true" className="h-4 w-4 text-slate-400" />
                 </div>
@@ -142,9 +145,7 @@ export function NotificationHealthPanel({
       </section>
 
       <section aria-labelledby="notification-channel-heading">
-        <h2 className="mb-3 font-semibold text-ink" id="notification-channel-heading">
-          通知通道
-        </h2>
+        <h2 className="mb-3 font-semibold text-ink" id="notification-channel-heading"> {t("通知通道")} </h2>
         <div className="grid gap-px overflow-hidden border-y border-slate-200 bg-slate-200 sm:grid-cols-3">
           {(["LINE", "EMAIL", "SMS"] as const).map((channel) => {
             const integration = integrationByChannel.get(channel);
@@ -160,7 +161,7 @@ export function NotificationHealthPanel({
                         : "bg-slate-100 text-slate-600"
                     }`}
                   >
-                    {active ? "已啟用" : "未啟用"}
+                    {active ? t("已啟用") : t("未啟用")}
                   </span>
                 </div>
                 {integration?.lastErrorCode ? (
@@ -175,22 +176,20 @@ export function NotificationHealthPanel({
       </section>
 
       <section aria-labelledby="notification-delivery-heading">
-        <h2 className="mb-3 font-semibold text-ink" id="notification-delivery-heading">
-          最近通知結果
-        </h2>
+        <h2 className="mb-3 font-semibold text-ink" id="notification-delivery-heading"> {t("最近通知結果")} </h2>
         {deliveries.length === 0 ? (
           <div className="border-y border-slate-200 bg-white px-4 py-10 text-center">
-            <p className="font-semibold text-ink">尚未有通知紀錄</p>
+            <p className="font-semibold text-ink"> {t("尚未有通知紀錄")} </p>
           </div>
         ) : (
           <>
             <div className="divide-y divide-slate-200 border-y border-slate-200 bg-white sm:hidden">
-              {deliveries.map((delivery) => (
+              {deliveryPage.items.map((delivery) => (
                 <article className="px-4 py-4" key={delivery.id}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-semibold text-ink">
-                        {eventLabels[delivery.eventType] ?? delivery.eventType}
+                        {t(eventLabels[delivery.eventType] ?? delivery.eventType)}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
                         {formatDeliveryTime(delivery.createdAt, timezone)} ·{" "}
@@ -205,8 +204,7 @@ export function NotificationHealthPanel({
                     </p>
                   ) : null}
                   <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
-                    <span>
-                      嘗試 {delivery.attemptCount}/{delivery.maxAttempts}
+                    <span> {t("嘗試")} {delivery.attemptCount}/{delivery.maxAttempts}
                     </span>
                     <RetryButton
                       busy={isSubmitting}
@@ -222,22 +220,22 @@ export function NotificationHealthPanel({
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs text-slate-500">
                   <tr>
-                    <th className="px-4 py-3 font-medium">時間</th>
-                    <th className="px-4 py-3 font-medium">事件</th>
-                    <th className="px-4 py-3 font-medium">通道</th>
-                    <th className="px-4 py-3 font-medium">結果</th>
-                    <th className="px-4 py-3 font-medium">錯誤碼</th>
-                    <th className="px-4 py-3 font-medium">操作</th>
+                    <th className="px-4 py-3 font-medium"> {t("時間")} </th>
+                    <th className="px-4 py-3 font-medium"> {t("事件")} </th>
+                    <th className="px-4 py-3 font-medium"> {t("通道")} </th>
+                    <th className="px-4 py-3 font-medium"> {t("結果")} </th>
+                    <th className="px-4 py-3 font-medium"> {t("錯誤碼")} </th>
+                    <th className="px-4 py-3 font-medium"> {t("操作")} </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {deliveries.map((delivery) => (
+                  {deliveryPage.items.map((delivery) => (
                     <tr key={delivery.id}>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                         {formatDeliveryTime(delivery.createdAt, timezone)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-ink">
-                        {eventLabels[delivery.eventType] ?? delivery.eventType}
+                        {t(eventLabels[delivery.eventType] ?? delivery.eventType)}
                       </td>
                       <td className="px-4 py-3 text-slate-600">
                         {delivery.channel}
@@ -262,6 +260,7 @@ export function NotificationHealthPanel({
             </div>
           </>
         )}
+        {deliveryPage.pager}
       </section>
     </div>
   );

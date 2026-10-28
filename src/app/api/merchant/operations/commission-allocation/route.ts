@@ -36,7 +36,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   try {
     const input = await inputFor(request);
     return jsonSuccess({ preview: await previewProviderAllocation(input) });
-  } catch (error) { return jsonError(error,requestId); }
+  } catch (error) { return jsonError(error,requestId, request); }
 }
 
 export async function PUT(request: NextRequest): Promise<Response> {
@@ -48,5 +48,5 @@ export async function PUT(request: NextRequest): Promise<Response> {
       "BAD_REQUEST","Booking version required",400);
     return jsonSuccess({ allocation: await publishProviderAllocation({
       ...input, expectedBookingVersion }) });
-  } catch (error) { return jsonError(error,requestId); }
+  } catch (error) { return jsonError(error,requestId, request); }
 }

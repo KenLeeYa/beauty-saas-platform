@@ -41,7 +41,7 @@ export async function GET(request:NextRequest) {
       order by request.verified_at desc limit 50
     `);
     return jsonSuccess(rows,{headers:{"cache-control":"no-store","x-request-id":requestId}});
-  } catch(error) {return jsonError(error,requestId);}
+  } catch(error) {return jsonError(error,requestId, request);}
 }
 
 export async function POST(request:NextRequest) {
@@ -55,5 +55,5 @@ export async function POST(request:NextRequest) {
       context,requestId:action.requestId}),{headers:{"x-request-id":requestId}});
     await revokeEmployeeLineLink({context,linkId:action.linkId,reason:action.reason});
     return jsonSuccess({revoked:true},{headers:{"x-request-id":requestId}});
-  } catch(error) {return jsonError(error,requestId);}
+  } catch(error) {return jsonError(error,requestId, request);}
 }

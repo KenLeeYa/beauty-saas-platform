@@ -52,6 +52,12 @@ export const createMerchantStaffSchema = z.object({
   skills: z.array(z.string().trim().min(1).max(80)).max(30),
 }).strict();
 
+export const createStaffSkillSchema = z.object({name:z.string().trim().min(1).max(80)}).strict();
+export const updateStaffSkillsSchema = z.object({
+  staffId:z.uuid(), skills:createMerchantStaffSchema.shape.skills,
+  expectedSkills:createMerchantStaffSchema.shape.skills,
+}).strict();
+
 export const createMerchantResourceSchema = z.object({
   name: z.string().trim().min(1).max(120),
   typeName: z.string().trim().min(1).max(120),
@@ -122,6 +128,12 @@ export const merchantServiceBufferSchema = z.object({
 export const merchantServiceUpdateSchema = z.union([
   merchantServiceToggleSchema,
   merchantServiceBufferSchema,
+  z.object({
+    action: z.literal("UPDATE_SKILLS"),
+    locationServiceId: z.uuid(),
+    skills: z.array(z.string().trim().min(1).max(80)).max(30),
+    expectedSkills: z.array(z.string().trim().min(1).max(80)).max(30),
+  }).strict(),
 ]);
 
 export const merchantLocationUpdateSchema = z.discriminatedUnion(

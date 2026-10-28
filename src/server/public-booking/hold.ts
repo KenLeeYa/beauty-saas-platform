@@ -1,4 +1,5 @@
 import "server-only";
+import {assertBookableStaff} from "../staff/service-capability";
 
 import { Prisma } from "@prisma/client";
 
@@ -240,21 +241,8 @@ export async function createBookingHold(input: {
           );
         }
 
-        const qualified = await transaction.$queryRaw<{ id: string }[]>(Prisma.sql`
-          select assignment.id from public.service_staff_assignments assignment
-          join public.location_services service
-            on service.id = assignment.location_service_id
-           and service.organization_id = assignment.organization_id
-          where service.organization_id = ${input.context.organizationId}::uuid
-            and service.location_id = ${input.context.locationId}::uuid
-            and service.service_variant_id = ${input.serviceVariantId}::uuid
-            and assignment.staff_profile_id = ${input.staffProfileId}::uuid
-            and assignment.is_active and assignment.online_booking_enabled
-            and assignment.effective_from <= ${requestedStart}
-            and (assignment.effective_until is null or assignment.effective_until > ${requestedStart})
-          for share of assignment
-        `);
-        if (!qualified[0]) throw new AppError("CONFLICT", "Staff service eligibility changed", 409);
+        await assertBookableStaff(transaction, {...input.context, serviceVariantId: input.serviceVariantId,
+          staffProfileId: input.staffProfileId, startsAt: requestedStart});
 
         const replacementTime = new Date();
         await transaction.booking_holds.updateMany({

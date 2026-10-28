@@ -102,6 +102,11 @@ export function publicMediaUrl(path: string | null): string | null {
   if (!path) {
     return null;
   }
+  // Bundled fictional fixtures are available only in the explicit local trial.
+  if (process.env.APP_ENV === "test" && process.env.UNIFIED_LOCAL_TRIAL === "true") {
+    const fixture = /^tenants\/(?:11111111-1111-4111-8111-111111111111|d1000000-0000-4000-8000-000000000001)\/demo\/(demo-salon|demo-beautician|demo-beautician-senior)\.png$/.exec(path);
+    if (fixture) return `/images/${fixture[1]}.png`;
+  }
   const baseUrl = getServerEnv().NEXT_PUBLIC_SUPABASE_URL.replace(/\/$/, "");
   const encodedPath = path
     .split("/")

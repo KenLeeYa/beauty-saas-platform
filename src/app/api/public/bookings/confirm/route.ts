@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import {requestLocale} from '@/lib/i18n/request';
 
 import { AppError } from "@/server/http/errors";
 import { jsonError, jsonSuccess } from "@/server/http/response";
@@ -37,6 +38,7 @@ export async function POST(request: NextRequest) {
         context,
         payload,
         idempotencyKey,
+        notificationLocale: requestLocale(request),
       }),
       {
         status: 201,
@@ -46,6 +48,6 @@ export async function POST(request: NextRequest) {
       },
     );
   } catch (error) {
-    return jsonError(error, requestId);
+    return jsonError(error, requestId, request);
   }
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import {assertBookableStaff} from "../staff/service-capability";
 
 import { Prisma, type booking_source } from "@prisma/client";
 import { getBookingEligibility } from "../../modules/crm/server/customer-status";
@@ -18,6 +19,7 @@ import {
   type PublicSessionContext,
 } from "./context";
 import type { ConfirmPublicBookingInput } from "./schemas";
+import type {Locale} from '@/lib/i18n/locale';
 
 type BookingSummaryRecord = Awaited<
   ReturnType<typeof findBookingByTrackingHash>
@@ -312,6 +314,7 @@ export async function confirmPublicBooking(input: {
   linkedCustomerId?: string;
   keepSessionActive?: boolean;
   dispatchClaimId?: string;
+  notificationLocale?: Locale;
 }): Promise<PublicBookingSummary> {
   await prisma.$queryRaw(
     Prisma.sql`select beauty_private.expire_booking_holds()`,
@@ -429,6 +432,8 @@ export async function confirmPublicBooking(input: {
           );
         }
 
+        await assertBookableStaff(transaction, {...input.context, serviceVariantId: hold.service_variants.id,
+          staffProfileId: hold.staff_profile_id, startsAt: hold.starts_at});
         const contactMatches =
           await transaction.customer_contacts.findMany({
             where: {
@@ -485,6 +490,7 @@ export async function confirmPublicBooking(input: {
               data: {
                 organization_id: input.context.organizationId,
                 display_name: input.payload.customer.displayName,
+                preferred_language: input.notificationLocale ?? 'zh-TW',
                   source: input.source === "LINE" ? "LINE" :
                     input.source === "PHONE" ? "PHONE" : "WEBSITE",
                 general_preferences:
@@ -549,6 +555,10 @@ export async function confirmPublicBooking(input: {
           if (input.linkedCustomerId && customer.display_name === "LINE customer") {
             await transaction.customers.update({where:{id:customer.id},
               data:{display_name:input.payload.customer.displayName}});
+          }
+          if (input.linkedCustomerId && input.notificationLocale) {
+            await transaction.customers.updateMany({where: {id: customer.id,
+              organization_id: input.context.organizationId}, data: {preferred_language: input.notificationLocale}});
           }
 
           const existingEmail = contactMatches.some(
@@ -1350,6 +1360,8 @@ export async function reschedulePublicBooking(input: {
           );
         }
 
+        await assertBookableStaff(transaction, {...input.context, serviceVariantId: hold.service_variants.id,
+          staffProfileId: hold.staff_profile_id, startsAt: hold.starts_at});
         const replacement = await transaction.bookings.create({
           data: {
             organization_id: original.organization_id,

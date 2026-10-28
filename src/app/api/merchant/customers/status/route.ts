@@ -35,5 +35,5 @@ export async function PATCH(request: NextRequest): Promise<Response> {
       reviewAt: input.reviewAt ? new Date(input.reviewAt) : null,
       reason: input.reason, requestId });
     return jsonSuccess({ updated: true }, { headers: { "x-request-id": requestId } });
-  } catch (error) { return jsonError(error, requestId); }
+  } catch (error) { return jsonError(error, requestId, request); }
 }

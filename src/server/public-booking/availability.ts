@@ -1,4 +1,5 @@
 import "server-only";
+import {hasRequiredSkills} from "@/lib/staff-skills";
 
 import { Prisma } from "@prisma/client";
 
@@ -227,6 +228,7 @@ export async function getPublicAvailability(
         take: 1,
         select: {
           price_override_minor: true,
+          required_skills: true,
           duration_override_minutes: true,
           services: {
             select: {
@@ -286,6 +288,7 @@ export async function getPublicAvailability(
                   id: true,
                   display_name: true,
                   title: true,
+                  skills: true,
                   staff_availability_rules: {
                     where: {
                       location_id: context.locationId,
@@ -509,7 +512,9 @@ export async function getPublicAvailability(
     }),
   );
 
-  const staffSummaries = locationService.service_staff_assignments.map(
+  const eligibleAssignments = locationService.service_staff_assignments.filter(({staff_profiles}) =>
+    hasRequiredSkills(locationService.required_skills, staff_profiles.skills));
+  const staffSummaries = eligibleAssignments.map(
     ({ staff_profiles: staff }) => ({
       id: staff.id,
       displayName: staff.display_name,
@@ -521,7 +526,7 @@ export async function getPublicAvailability(
     PublicAvailability["slots"][number]
   >();
 
-  for (const { staff_profiles: staff, effective_from, effective_until } of locationService.service_staff_assignments) {
+  for (const { staff_profiles: staff, effective_from, effective_until } of eligibleAssignments) {
     const weeklyHours = staff.staff_availability_rules.map((rule) => ({
       opensAt: databaseTimeToString(rule.starts_at),
       closesAt: databaseTimeToString(rule.ends_at),

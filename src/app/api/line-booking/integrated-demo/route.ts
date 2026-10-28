@@ -21,6 +21,7 @@ const roles = {
   beautician: "33333333-3333-4333-8333-333333333305",
   owner: "33333333-3333-4333-8333-333333333301",
 } as const;
+const demo = {organizationId,locationId,channelId,providerId,entrySlug,roles};
 
 export async function GET(request: NextRequest): Promise<Response> {
   const host = request.headers.get("host");
@@ -28,6 +29,13 @@ export async function GET(request: NextRequest): Promise<Response> {
   if (host) publicUrl.host = host;
   const trialOrigin = localTrialOrigin(publicUrl.toString(), host, process.env);
   if (!trialOrigin) return new Response("Not found",{ status: 404 });
+  const store = request.nextUrl.searchParams.get("store") ?? "demo";
+  if (!["demo","showcase"].includes(store)) return new Response("Unknown local store",{status:400});
+  const {organizationId,locationId,channelId,providerId,entrySlug,roles} = store === "showcase" ? {
+    organizationId:"d1000000-0000-4000-8000-000000000001",locationId:"d2000000-0000-4000-8000-000000000001",
+    channelId:"showcase-local-login",providerId:"showcase-local-provider",entrySlug:"showcase-daan",
+    roles:{customer:null,owner:"d3000000-0000-4000-8000-000000000001",receptionist:"d3000000-0000-4000-8000-000000000004",beautician:"d3000000-0000-4000-8000-000000000005"},
+  } : demo;
   const role = z.enum(["customer","receptionist","beautician","owner"])
     .safeParse(request.nextUrl.searchParams.get("role"));
   if (!role.success) return new Response("Invalid synthetic role",{ status: 400 });
@@ -78,7 +86,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   }
   const session = await createLineMobileSession({ organizationId,locationId,
     channelId,identity,deviceId:randomToken(16),origin:trialOrigin });
-  const destination = profileId === roles.owner ?
+  const destination = store === "showcase" && role.data === "customer" ? `/book/showcase/daan` : profileId === roles.owner ?
     `/merchant/operations?organization=${encodeURIComponent(organization.slug)}&location=${encodeURIComponent(location.slug)}` :
     `/line-booking/${entrySlug}`;
   const response = NextResponse.redirect(new URL(destination,trialOrigin));

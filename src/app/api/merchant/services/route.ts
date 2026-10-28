@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server";
 import { revalidateTag } from "next/cache";
+import {updateServiceSkills} from "@/server/merchant/staff-skills";
+import {listMerchantServices,serviceDirectorySchema} from "@/server/merchant/catalog-directory";
 
 import {
   assertSessionCsrf,
@@ -19,9 +21,9 @@ import {
 } from "@/server/merchant/schemas";
 import { getRequestId } from "@/server/security/request";
 
-async function requestContext(request: NextRequest) {
+async function requestContext(request: NextRequest, write = true) {
   const session = await requireRequestSession(request);
-  assertSessionCsrf(request, session);
+  if (write) assertSessionCsrf(request, session);
   const scope = merchantScopeSchema.parse({
     organization: request.nextUrl.searchParams.get("organization"),
     location: request.nextUrl.searchParams.get("location"),
@@ -31,6 +33,15 @@ async function requestContext(request: NextRequest) {
     organizationSlug: scope.organization,
     locationSlug: scope.location,
   });
+}
+
+export async function GET(request: NextRequest) {
+  const requestId=getRequestId(request);
+  try {
+    const context=await requestContext(request,false);
+    const input=serviceDirectorySchema.parse(Object.fromEntries(request.nextUrl.searchParams));
+    return jsonSuccess(await listMerchantServices(context,input),{headers:{"x-request-id":requestId,"cache-control":"no-store"}});
+  } catch(error) {return jsonError(error,requestId,request);}
 }
 
 export async function POST(request: NextRequest) {
@@ -51,7 +62,7 @@ export async function POST(request: NextRequest) {
       { status: 201, headers: { "x-request-id": requestId } },
     );
   } catch (error) {
-    return jsonError(error, requestId);
+    return jsonError(error, requestId, request);
   }
 }
 
@@ -62,7 +73,9 @@ export async function PATCH(request: NextRequest) {
     const input = merchantServiceUpdateSchema.parse(
       await request.json(),
     );
-    const result = "action" in input
+    const result = "action" in input && input.action === "UPDATE_SKILLS"
+      ? await updateServiceSkills({context,...input,requestId})
+      : "action" in input
       ? await updateMerchantServiceBuffers({
           context,
           ...input,
@@ -79,6 +92,6 @@ export async function PATCH(request: NextRequest) {
       { headers: { "x-request-id": requestId } },
     );
   } catch (error) {
-    return jsonError(error, requestId);
+    return jsonError(error, requestId, request);
   }
 }

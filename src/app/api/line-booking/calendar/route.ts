@@ -1,3 +1,4 @@
+import { publicMessage } from '@/lib/line-booking/validation';
 import {message,storeQuery} from '@/lib/line-booking/validation';
 import {withDb} from '@/lib/line-booking/db';
 import {actor} from '@/lib/line-booking/auth';
@@ -59,5 +60,5 @@ export async function GET(request: Request) {
       return {role:owner?'owner':'staff',bookings:rows.map(row=>owner||row.staff_id===staff.id?row:{id:row.id,staff_id:row.staff_id,start:row.start,finish:row.finish,busy:true})};
     });
     return Response.json(result);
-  } catch(error) {if(error instanceof AppError) return Response.json({error:error.message},{status:error.status});return Response.json({error:message(error)},{status:/authentication|session/.test(message(error))?401:/forbidden/.test(message(error))?403:400});}
+  } catch(error) {if(error instanceof AppError) return Response.json({error:publicMessage(error, request)},{status:error.status});return Response.json({error:publicMessage(error, request)},{status:/authentication|session/.test(message(error))?401:/forbidden/.test(message(error))?403:400});}
 }

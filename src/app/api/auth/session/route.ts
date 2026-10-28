@@ -20,6 +20,6 @@ export async function GET(request: NextRequest) {
       redirectTo,
     });
   } catch (error) {
-    return jsonError(error);
+    return jsonError(error, undefined, request);
   }
 }

@@ -6,6 +6,7 @@ import { hasCapability } from "@/server/authorization/capabilities";
 import { resolveMerchantContext } from "@/server/merchant/context";
 import { getMerchantWorkspaceData } from "@/server/merchant/data";
 import { canShowModule } from "@/server/entitlements/module-visibility";
+import {getMerchantTeam} from "@/server/merchant/team";
 
 export type MerchantView =
   | "dashboard"
@@ -52,22 +53,15 @@ export async function MerchantRoute({
   }
   const crmVisible=await canShowModule(context,"CUSTOMER_CRM");
   if(activeView==="customers" && !crmVisible) forbidden();
-  const data = await getMerchantWorkspaceData(context);
-  const entityRevision =
-    activeView === "services"
-      ? data.services.map((service) => service.locationServiceId)
-      : activeView === "staff"
-        ? data.staff.map((staff) => staff.id)
-        : activeView === "resources"
-          ? data.resources.map((resource) => resource.id)
-          : activeView === "customers"
-            ? data.customers.map((customer) => customer.id)
-            : [];
+  if(activeView==="team" && !hasCapability(context.roles,"team.read")) forbidden();
+  const data = await getMerchantWorkspaceData(context, {
+    pagedCatalog: activeView === "services" || activeView === "staff",
+    pagedFacilities: activeView === "locations" || activeView === "resources",
+  });
   const workspaceRevision = [
     context.organization.id,
     context.location?.id ?? "organization",
     activeView,
-    ...entityRevision,
   ].join(":");
 
   return (
@@ -75,6 +69,7 @@ export async function MerchantRoute({
       activeView={activeView}
       initialData={data}
       crmVisible={crmVisible}
+      teamData={activeView === "team" ? await getMerchantTeam(context) : []}
       key={workspaceRevision}
     />
   );

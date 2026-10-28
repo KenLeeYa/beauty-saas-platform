@@ -14,7 +14,7 @@ type PageRow = { [Key in keyof ReviewRow]: ReviewRow[Key] | null } & { total: nu
 // Derive work from current persisted terms, not a second queue that can miss concurrent
 // confirmations or retain cancelled/reassigned/restored bookings.
 export async function findQualificationReviews(transaction: Prisma.TransactionClient,
-  context: OrganizationContext, options: { assignmentId?: string; offset?: number } = {}) {
+  context: OrganizationContext, options: { assignmentId?: string; offset?: number; limit?: number; search?: string } = {}) {
   const location = requireLocation(context);
   const rows = await transaction.$queryRaw<PageRow[]>(Prisma.sql`
     with pending as (
@@ -49,15 +49,18 @@ export async function findQualificationReviews(transaction: Prisma.TransactionCl
       and segment.starts_at > now() and booking.service_started_at is null
       and booking.status in ('CONFIRMED', 'PENDING_PAYMENT')
       and (assignment.effective_from > segment.starts_at
-        or assignment.effective_until <= segment.starts_at or not assignment.is_active)
+        or assignment.effective_until <= segment.starts_at or not assignment.is_active
+        or not (service.required_skills <@ staff.skills))
       and exists (select 1 from public.staff_capability_events event
         where event.assignment_id = assignment.id and event.organization_id = segment.organization_id
           and event.location_id = segment.location_id)
       ${options.assignmentId ? Prisma.sql`and assignment.id = ${options.assignmentId}::uuid` : Prisma.empty}
+      ${options.search?.trim() ? Prisma.sql`and (strpos(lower(staff.display_name), lower(${options.search.trim()})) > 0
+        or strpos(lower(segment.service_name_snapshot), lower(${options.search.trim()})) > 0)` : Prisma.empty}
     )
     select page.*, totals.total from (select count(*)::integer as total from pending) totals
     left join lateral (select * from pending order by "startsAt", "segmentId", "staffId", "allocationId"
-      limit 50 offset ${options.offset ?? 0}) page on true
+      limit ${Math.min(50, Math.max(1, options.limit ?? 50))} offset ${options.offset ?? 0}) page on true
     order by page."startsAt", page."segmentId", page."staffId", page."allocationId"
   `);
   // A null primary key is the count-only row for an empty page; real rows have all selected fields.
@@ -91,7 +94,7 @@ export async function findQualificationReviews(transaction: Prisma.TransactionCl
     total: rows[0]?.total ?? 0, timezone: location.timezone };
 }
 
-export async function listQualificationReviews(context: OrganizationContext, offset = 0) {
+export async function listQualificationReviews(context: OrganizationContext, offset = 0, options: {limit?: number; search?: string} = {}) {
   assertCapability(context, "booking.manage");
-  return findQualificationReviews(prisma, context, { offset });
+  return findQualificationReviews(prisma, context, { ...options, offset });
 }

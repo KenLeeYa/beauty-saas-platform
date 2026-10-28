@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import {notification_event_type} from '@prisma/client';
 
 import {
   renderNotification,
@@ -50,6 +51,28 @@ describe("selectNotificationRecipient", () => {
 });
 
 describe("renderNotification", () => {
+  it.each(Object.values(notification_event_type))('renders %s in all supported languages', eventType => {
+    const results = ['zh-TW', 'en', 'vi'].map(language => renderNotification({eventType, language,
+      organizationName: 'Lumi', locationName: 'Salon', timezone: 'Asia/Taipei',
+      customerName: 'QA', serviceName: 'Facial', startsAt: new Date('2026-07-29T02:15:00Z')}));
+    expect(new Set(results.map(result => result.subject)).size).toBe(3);
+    for (const result of results) {expect(result.text).toContain('10:15'); expect(result.subject).not.toContain('undefined');}
+    expect(results[1].text).not.toMatch(/[\p{Script=Han}]/u);
+    expect(results[2].text).not.toMatch(/[\p{Script=Han}]/u);
+  });
+  it.each([
+    ['en-US', 'Appointment reminder: 1 hour', 'Time:', 'Hello'],
+    ['vi-VN', 'Nhắc lịch hẹn trước 1 giờ', 'Thời gian:', 'Xin chào'],
+    ['zh-Hant-TW', '預約前一小時提醒', '時間：', '您好'],
+  ])('uses recipient language %s without translating business names', (language, subject, time, greeting) => {
+    const result = renderNotification({eventType: 'BOOKING_REMINDER_1H', language,
+      organizationName: 'Lumi', locationName: '台北店', timezone: 'Asia/Taipei',
+      customerName: '<小美>', serviceName: '經典美睫', startsAt: new Date('2026-07-29T02:15:00Z')});
+    expect(result.subject).toContain(subject);
+    expect(result.text).toContain(time); expect(result.text).toContain(greeting);
+    expect(result.text).toContain('10:15'); expect(result.text).toContain('經典美睫');
+    expect(result.html).toContain('&lt;小美&gt;'); expect(result.html).not.toContain('<小美>');
+  });
   it("renders the one-hour reminder in the branch timezone", () => {
     const result = renderNotification({
       eventType: "BOOKING_REMINDER_1H",

@@ -1,5 +1,7 @@
 "use client";
 
+import { useLanguage } from "@/components/language-provider";
+
 import {
   Check,
   CircleHelp,
@@ -51,6 +53,7 @@ export function MerchantApplicationReview({
 }: {
   data: AdminMerchantApplicationData;
 }) {
+  const { t, errorText } = useLanguage();
   const router = useRouter();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -66,8 +69,8 @@ export function MerchantApplicationReview({
         window
           .prompt(
             action === "REQUEST_INFO"
-              ? "請輸入需要補充的資料："
-              : "請輸入未通過原因：",
+              ? t("請輸入需要補充的資料：")
+              : t("請輸入未通過原因："),
           )
           ?.trim() || undefined;
       if (!reason) {
@@ -77,7 +80,7 @@ export function MerchantApplicationReview({
     if (
       action === "APPROVE" &&
       !window.confirm(
-        `核准「${application.businessName}」並建立試用商家空間？公開預約仍會維持關閉。`,
+        `${application.businessName}: ${t("核准此申請並建立試用商家空間？公開預約仍會維持關閉。")}`,
       )
     ) {
       return;
@@ -105,7 +108,7 @@ export function MerchantApplicationReview({
       const payload = (await response.json()) as ApiPayload;
       if (!response.ok || !payload.data) {
         throw new Error(
-          payload.error?.message ?? "商家申請審核失敗。",
+          payload.error?.message ?? t("商家申請審核失敗。"),
         );
       }
       setFeedback("申請狀態已更新。");
@@ -122,17 +125,17 @@ export function MerchantApplicationReview({
   }
 
   return (
-    <div>
+    <div className="platform-surface">
       <div aria-live="polite" className="mb-4">
         {feedback ? (
-          <p className="text-sm font-medium text-teal">{feedback}</p>
+          <p className="text-sm font-medium text-teal">{t(feedback)}</p>
         ) : null}
         {error ? (
           <p
             className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
             role="alert"
           >
-            {error}
+            {errorText(error)}
           </p>
         ) : null}
       </div>
@@ -154,36 +157,35 @@ export function MerchantApplicationReview({
                 </p>
               </div>
               <span className="rounded bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
-                {statusLabels[application.status] ??
-                  application.status}
+                {t(statusLabels[application.status] ?? application.status)}
               </span>
             </div>
 
             <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <dt className="text-xs text-slate-500">網址代碼</dt>
+                <dt className="text-xs text-slate-500">{t("網址代碼")}</dt>
                 <dd className="mt-1 font-medium text-ink">
                   {application.desiredSlug}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">第一間分店</dt>
+                <dt className="text-xs text-slate-500">{t("第一間分店")}</dt>
                 <dd className="mt-1 font-medium text-ink">
                   {application.initialLocationName}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">聯絡電話</dt>
+                <dt className="text-xs text-slate-500">{t("聯絡電話")}</dt>
                 <dd className="mt-1 font-medium text-ink">
                   {application.contactPhone}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">送出時間</dt>
+                <dt className="text-xs text-slate-500">{t("送出時間")}</dt>
                 <dd className="mt-1 font-medium text-ink">
                   {application.submittedAt
                     ? formatLocalDateTime(application.submittedAt)
-                    : "尚未送出"}
+                    : t("尚未送出")}
                 </dd>
               </div>
             </dl>
@@ -208,8 +210,7 @@ export function MerchantApplicationReview({
                   }
                 >
                   <SearchCheck aria-hidden="true" className="h-4 w-4" />
-                  開始審核
-                </button>
+                  {t("開始審核")}</button>
               ) : null}
               {application.status === "PENDING_REVIEW" ? (
                 <>
@@ -225,8 +226,7 @@ export function MerchantApplicationReview({
                       aria-hidden="true"
                       className="h-4 w-4"
                     />
-                    要求補件
-                  </button>
+                    {t("要求補件")}</button>
                   <button
                     className="inline-flex h-10 items-center gap-2 rounded-md border border-red-200 px-4 text-sm font-semibold text-red-700 disabled:opacity-50"
                     disabled={pendingId === application.id}
@@ -234,8 +234,7 @@ export function MerchantApplicationReview({
                     onClick={() => void review(application, "REJECT")}
                   >
                     <X aria-hidden="true" className="h-4 w-4" />
-                    不通過
-                  </button>
+                    {t("不通過")}</button>
                   <button
                     className="inline-flex h-10 items-center gap-2 rounded-md bg-teal px-4 text-sm font-semibold text-white disabled:opacity-50"
                     disabled={pendingId === application.id}
@@ -243,8 +242,7 @@ export function MerchantApplicationReview({
                     onClick={() => void review(application, "APPROVE")}
                   >
                     <Check aria-hidden="true" className="h-4 w-4" />
-                    核准並建立試用
-                  </button>
+                    {t("核准並建立試用")}</button>
                 </>
               ) : null}
             </div>
@@ -252,8 +250,7 @@ export function MerchantApplicationReview({
         ))}
         {data.applications.length === 0 ? (
           <p className="border-y border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
-            目前沒有商家申請。
-          </p>
+            {t("目前沒有商家申請。")}</p>
         ) : null}
       </div>
     </div>

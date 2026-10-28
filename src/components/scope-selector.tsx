@@ -1,5 +1,7 @@
 import { Building2, ChevronRight, MapPin } from "lucide-react";
 import Link from "next/link";
+import { getLanguage } from "@/lib/i18n/server";
+import { translate } from "@/lib/i18n/messages";
 
 import { LogoutButton } from "./logout-button";
 
@@ -10,7 +12,7 @@ type ScopeOption = {
   href: string;
 };
 
-export function ScopeSelector({
+export async function ScopeSelector({
   displayName,
   kind,
   options,
@@ -19,6 +21,8 @@ export function ScopeSelector({
   kind: "organization" | "location";
   options: ScopeOption[];
 }) {
+  const { locale } = await getLanguage();
+  const t = (key: string) => translate(locale, key);
   const Icon = kind === "organization" ? Building2 : MapPin;
   const title = kind === "organization" ? "選擇商家" : "選擇分店";
   const subtitle =
@@ -27,10 +31,10 @@ export function ScopeSelector({
       : "請選擇這次要操作的分店。";
 
   return (
-    <main className="min-h-screen bg-mist">
+    <main className="scope-surface min-h-screen bg-mist">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div>
+          <div className="min-w-0">
             <p className="text-xs font-semibold text-teal">
               Beauty SaaS
             </p>
@@ -41,12 +45,12 @@ export function ScopeSelector({
           <LogoutButton />
         </div>
       </header>
-      <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+      <section className="mx-auto max-w-3xl px-4 py-5 sm:px-6 sm:py-10">
         <Icon aria-hidden="true" className="h-6 w-6 text-teal" />
-        <h1 className="mt-4 text-2xl font-semibold text-ink">{title}</h1>
-        <p className="mt-2 text-sm text-slate-600">{subtitle}</p>
+        <h1 className="mt-3 text-2xl font-semibold text-ink">{t(title)}</h1>
+        <p className="mt-2 text-sm text-slate-600">{t(subtitle)}</p>
 
-        <div className="mt-7 divide-y divide-slate-200 border-y border-slate-200 bg-white">
+        <nav aria-label={t(title)} className="mt-5 divide-y divide-slate-200 border-y border-slate-200 bg-white">
           {options.map((option) => (
             <Link
               className="flex min-h-20 items-center justify-between gap-4 px-4 py-4 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-teal"
@@ -67,7 +71,7 @@ export function ScopeSelector({
               />
             </Link>
           ))}
-        </div>
+        </nav>
       </section>
     </main>
   );

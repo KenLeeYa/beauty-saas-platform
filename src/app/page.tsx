@@ -9,6 +9,7 @@ import {
 } from "@/server/auth/oauth";
 import { getCurrentSession } from "@/server/auth/session";
 import { getServerEnv } from "@/server/env";
+import {getLanguage} from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export default async function HomePage({
   }
 
   const env = getServerEnv();
+  const {locale} = await getLanguage();
 
   return (
     <main
@@ -42,7 +44,7 @@ export default async function HomePage({
     >
       <section className="relative hidden min-h-screen overflow-hidden lg:block">
         <Image
-          alt="明亮整潔的美容工作室接待與護理空間"
+          alt={locale === 'en' ? 'Bright beauty studio reception and treatment area' : '明亮整潔的美容工作室接待與護理空間'}
           className="object-cover"
           fill
           priority
@@ -53,12 +55,12 @@ export default async function HomePage({
         <div className="absolute inset-x-0 bottom-0 bg-black/55 px-10 py-9 text-white">
           <p className="text-sm font-semibold">Lumi Beauty Studio</p>
           <p className="mt-2 max-w-xl text-2xl font-semibold leading-9">
-            從預約、排班到顧客關係，讓每一天的營運更清楚。
+            {locale === 'en' ? 'Appointments, schedules and client care, all in one place.' : '從預約、排班到顧客關係，讓每一天的營運更清楚。'}
           </p>
         </div>
       </section>
 
-      <section className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-10 lg:px-12">
+      <section className="flex items-center justify-center px-5 py-5 sm:px-10 lg:min-h-screen lg:px-12">
         <LoginForm
           googleEnabled={env.NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED}
           localAuthEnabled={

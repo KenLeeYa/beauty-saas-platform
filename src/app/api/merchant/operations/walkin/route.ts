@@ -31,7 +31,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   try {
     const { context, location } = await contextFor(request);
     return jsonSuccess({ policy: await getWalkInPolicy(context.organization.id,location.id) });
-  } catch (error) { return jsonError(error,requestId); }
+  } catch (error) { return jsonError(error,requestId, request); }
 }
 
 export async function PATCH(request: NextRequest): Promise<Response> {
@@ -41,5 +41,5 @@ export async function PATCH(request: NextRequest): Promise<Response> {
     assertSessionCsrf(request,session);
     const input = schema.parse(await request.json());
     return jsonSuccess({ policy: await configureWalkInPolicy({ context,...input,requestId }) });
-  } catch (error) { return jsonError(error,requestId); }
+  } catch (error) { return jsonError(error,requestId, request); }
 }

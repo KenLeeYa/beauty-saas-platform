@@ -2,6 +2,7 @@
 
 import { ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "./language-provider";
 
 declare global {
   interface Window {
@@ -32,6 +33,7 @@ export function TurnstileWidget({
   siteKey: string;
   onToken: (token: string | null) => void;
 }) {
+  const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const [shouldLoad, setShouldLoad] = useState(false);
@@ -129,7 +131,7 @@ export function TurnstileWidget({
       <div ref={containerRef} />
       <p className="mt-2 flex items-center gap-2 text-xs text-slate-500">
         <ShieldCheck aria-hidden="true" className="h-4 w-4 text-teal" />
-        完成安全驗證後即可查詢即時時段。
+        {t("完成安全驗證後即可查詢即時時段。")}
       </p>
     </div>
   );

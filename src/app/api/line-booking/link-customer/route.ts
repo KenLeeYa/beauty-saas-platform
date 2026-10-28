@@ -1,3 +1,6 @@
+import { publicMessage } from '@/lib/line-booking/validation';
+import { translateError } from '@/lib/i18n/messages';
+import { requestLocale } from '@/lib/i18n/request';
 import { z } from "zod";
 
 import { linkExistingCustomerByBooking } from "@/server/auth/line-linking";
@@ -26,7 +29,7 @@ export async function POST(request: Request): Promise<Response> {
     });
     return Response.json({ linked: true, customerId });
   } catch (error) {
-    if (error instanceof AppError) return Response.json({ error: error.message }, { status: error.status });
-    return Response.json({ error: "Invalid link request" }, { status: 400 });
+    if (error instanceof AppError) return Response.json({ error: publicMessage(error, request) }, { status: error.status });
+    return Response.json({ error: translateError(requestLocale(request), "連結資料無效，請確認預約憑證。") }, { status: 400 });
   }
 }

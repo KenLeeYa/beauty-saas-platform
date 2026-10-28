@@ -1,4 +1,5 @@
-import {message,storeQuery} from '@/lib/line-booking/validation';
+import { publicMessage } from '@/lib/line-booking/validation';
+import {storeQuery} from '@/lib/line-booking/validation';
 import {withDb} from '@/lib/line-booking/db';
 import {localDemoEnabled} from '@/lib/line-booking/local-demo';
 import {getPublicCatalog} from '@/server/public-booking/catalog';
@@ -22,5 +23,5 @@ export async function GET(request: Request) {
       return {timezone:store.timezone,services:services.rows,staff:staff.rows,skills:skills.rows};
     });
     return Response.json(result);
-  } catch(error) {return Response.json({error:message(error)},{status:400});}
+  } catch(error) {return Response.json({error:publicMessage(error, request)},{status:400});}
 }

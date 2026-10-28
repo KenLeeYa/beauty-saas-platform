@@ -1,4 +1,4 @@
-import {message} from '@/lib/line-booking/validation';
+import { publicMessage } from '@/lib/line-booking/validation';
 import {withDb} from '@/lib/line-booking/db';
 import {verifyLine} from '@/lib/line-booking/identity';
 import {open,seal,cookie} from '@/lib/line-booking/session';
@@ -30,5 +30,5 @@ export async function GET(request: Request) {
     headers.append('set-cookie',cookie('line_booking_session',session,8*3600));
     headers.append('set-cookie',cookie('line_booking_oauth','',0));
     return new Response(null,{status:302,headers});
-  } catch(error) {if(error instanceof AppError)return Response.json({error:error.message},{status:error.status});return Response.json({error:message(error)},{status:400});}
+  } catch(error) {if(error instanceof AppError)return Response.json({error:publicMessage(error, request)},{status:error.status});return Response.json({error:publicMessage(error, request)},{status:400});}
 }

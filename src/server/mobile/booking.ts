@@ -1,4 +1,5 @@
 import "server-only";
+import type {Locale} from '@/lib/i18n/locale';
 
 import type { VerifiedMobileActor } from "../auth/line-mobile-session";
 import { assignUnspecifiedBooking, failDispatchClaim, type DispatchMode } from "../booking/dispatch";
@@ -21,6 +22,7 @@ export async function bookMobile(input: {
   source: "line" | "phone" | "personal-line";
   idempotencyKey: string;
   holdOnly?: boolean;
+  notificationLocale?: Locale;
 }): Promise<{ id: string; status: string; start: string; trackingToken?: string }> {
   const source = bookingSourceForMobileActor(input.actor, input.source);
   if (input.dispatchMode === "immediate" && input.actor.kind !== "employee") {
@@ -44,6 +46,7 @@ export async function bookMobile(input: {
     const confirmed = await confirmPublicBooking({
       context: input.context, idempotencyKey: input.idempotencyKey,
       keepSessionActive: true, dispatchClaimId: dispatch?.claimId,
+      notificationLocale: input.actor.kind === 'customer' ? input.notificationLocale : undefined,
       source, linkedCustomerId: input.actor.kind === "customer" ? input.actor.customerId ?? undefined : undefined,
       payload: { holdToken: hold.holdToken,
         customer: { displayName: input.name, phone: input.phone },

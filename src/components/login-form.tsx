@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
+import {LanguageSwitcher, useLanguage} from "./language-provider";
 
 type LoginPayload = {
   data?: {
@@ -57,6 +58,7 @@ export function LoginForm({
   localAuthEnabled: boolean;
   nextPath?: string;
 }) {
+  const {t, errorText} = useLanguage();
   const router = useRouter();
   const [email, setEmail] = useState<string>(
     localAuthEnabled ? testAccounts.merchant.email : "",
@@ -113,18 +115,17 @@ export function LoginForm({
         <span className="flex h-10 w-10 items-center justify-center rounded-md bg-ink text-sm font-bold text-white">
           L
         </span>
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-ink">Lumi Workspace</p>
-          <p className="text-xs text-slate-500">Beauty operations</p>
+          <p className="text-xs text-slate-500">{t("營運後台")}</p>
         </div>
+        <LanguageSwitcher />
       </div>
 
-      <h1 className="mt-8 text-3xl font-semibold text-ink sm:text-4xl">
-        登入預約空間
-      </h1>
+      <h1 className="mt-5 text-2xl font-semibold text-ink sm:text-3xl">
+        {t("登入預約空間")}</h1>
       <p className="mt-3 text-sm leading-6 text-slate-600">
-        依照組織與分店權限，自動進入店家後台、服務人員班表或顧客預約頁。
-      </p>
+        {t("依照組織與分店權限，自動進入店家後台、服務人員班表或顧客預約頁。")}</p>
 
       {localAuthEnabled ? (
         <div className="mt-7 grid grid-cols-2 gap-3">
@@ -140,11 +141,9 @@ export function LoginForm({
             <Store aria-hidden="true" className="h-5 w-5 shrink-0 text-teal" />
             <span>
               <span className="block text-sm font-semibold text-ink">
-                店家測試
-              </span>
+                {t("店家測試")}</span>
               <span className="mt-1 block text-xs text-slate-500">
-                營運後台
-              </span>
+                {t("營運後台")}</span>
             </span>
           </button>
           <button
@@ -162,11 +161,9 @@ export function LoginForm({
             />
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-ink">
-                員工測試
-              </span>
+                {t("員工測試")}</span>
               <span className="mt-1 block text-xs text-slate-500">
-                個人班表
-              </span>
+                {t("個人班表")}</span>
             </span>
           </button>
           <button
@@ -184,11 +181,9 @@ export function LoginForm({
             />
             <span>
               <span className="block text-sm font-semibold text-ink">
-                顧客測試
-              </span>
+                {t("顧客測試")}</span>
               <span className="mt-1 block text-xs text-slate-500">
-                線上預約
-              </span>
+                {t("線上預約")}</span>
             </span>
           </button>
           <button
@@ -206,34 +201,33 @@ export function LoginForm({
             />
             <span>
               <span className="block text-sm font-semibold text-ink">
-                申請測試
-              </span>
+                {t("申請測試")}</span>
               <span className="mt-1 block text-xs text-slate-500">
-                商家導入
-              </span>
+                {t("商家導入")}</span>
             </span>
           </button>
         </div>
       ) : null}
 
-      <form className="mt-6 space-y-3" onSubmit={(event) => {
+      <details className="mt-5 border-y border-slate-200 py-2">
+      <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{t('使用 LINE 登入後台')}</summary>
+      <form className="space-y-3 pb-3" onSubmit={(event) => {
         event.preventDefault();
         if (lineStore.trim()) window.location.assign(
           `/api/auth/line/login?store=${encodeURIComponent(lineStore.trim())}`);
       }}>
         <label className="block text-sm font-medium text-slate-700" htmlFor="line-store">
-          店家預約代碼
-        </label>
+          {t("店家預約代碼")}</label>
         <input id="line-store" className="h-12 w-full rounded-md border border-slate-300 px-4 focus:outline-none focus:ring-2 focus:ring-teal/50"
           value={lineStore} onChange={(event) => setLineStore(event.target.value)}
           autoComplete="off" required pattern="[a-z0-9-]+" maxLength={80}
-          placeholder="store-code" disabled={!isHydrated}/>
+          placeholder={t("例如：demo")} disabled={!isHydrated}/>
         <button type="submit" disabled={!isHydrated || !lineStore.trim()}
           className="h-12 w-full rounded-md bg-teal px-5 font-semibold text-white focus:outline-none focus:ring-2 focus:ring-teal/50 disabled:opacity-50">
-          使用 LINE 登入後台
-        </button>
-        <p className="text-xs text-slate-500">需先由店家核准 LINE 與既有員工帳號的連結。</p>
+          {t("使用 LINE 登入後台")}</button>
+        <p className="text-xs text-slate-500">{t("需先由店家核准 LINE 與既有員工帳號的連結。")}</p>
       </form>
+      </details>
 
       <form
         className="mt-6 space-y-4"
@@ -243,7 +237,7 @@ export function LoginForm({
         }}
       >
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Email</span>
+            <span className="text-sm font-medium text-slate-700">{t("電子郵件")}</span>
             <input
               autoComplete="username"
               className="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
@@ -257,7 +251,7 @@ export function LoginForm({
           </label>
 
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">密碼</span>
+            <span className="text-sm font-medium text-slate-700">{t("密碼")}</span>
             <span className="relative mt-2 block">
               <input
                 autoComplete="current-password"
@@ -269,9 +263,9 @@ export function LoginForm({
                 onChange={(event) => setPassword(event.target.value)}
               />
               <button
-                aria-label={showPassword ? "隱藏密碼" : "顯示密碼"}
+                aria-label={showPassword ? t("隱藏密碼") : t("顯示密碼")}
                 className="absolute right-1 top-1 flex h-10 w-10 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-ink"
-                title={showPassword ? "隱藏密碼" : "顯示密碼"}
+                title={showPassword ? t("隱藏密碼") : t("顯示密碼")}
                 type="button"
                 onClick={() => setShowPassword((current) => !current)}
               >
@@ -286,7 +280,7 @@ export function LoginForm({
 
           {error ? (
             <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
+              {errorText(error)}
             </p>
           ) : null}
 
@@ -296,13 +290,13 @@ export function LoginForm({
             type="submit"
           >
             <LogIn aria-hidden="true" className="h-4 w-4" />
-            {!isHydrated ? "準備中" : isSubmitting ? "登入中" : "登入"}
+            {!isHydrated ? t("準備中") : isSubmitting ? t("登入中") : t("登入")}
           </button>
       </form>
 
       <div className="my-6 flex items-center gap-3 text-xs text-slate-400">
         <span className="h-px flex-1 bg-slate-200" />
-        <span>或</span>
+        <span>{t("或")}</span>
         <span className="h-px flex-1 bg-slate-200" />
       </div>
 
@@ -327,21 +321,18 @@ export function LoginForm({
         >
           G
         </span>
-        使用 Google 繼續
-      </a>
+        {t("使用 Google 繼續")}</a>
 
       <p className="mt-4 flex items-center justify-center gap-2 text-center text-xs text-slate-500">
         <ShieldCheck aria-hidden="true" className="h-4 w-4 text-teal" />
-        角色與分店權限由伺服器重新驗證
-      </p>
+        {t("角色與分店權限由伺服器重新驗證")}</p>
       <p className="mt-5 text-center text-sm text-slate-600">
-        想使用店家後台？{" "}
+        {t("想使用店家後台？")}{" "}
         <Link
           className="font-semibold text-teal hover:underline"
           href="/onboarding"
         >
-          申請商家空間
-        </Link>
+          {t("申請商家空間")}</Link>
       </p>
     </div>
   );

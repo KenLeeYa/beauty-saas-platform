@@ -1,3 +1,4 @@
+import { publicMessage } from '@/lib/line-booking/validation';
 import {message,changeInput} from '@/lib/line-booking/validation';
 import {withDb} from '@/lib/line-booking/db';
 import {actor} from '@/lib/line-booking/auth';
@@ -82,7 +83,7 @@ export async function PATCH(request: Request,{params}: {params: Promise<{id:stri
     });
     return Response.json(result);
   } catch(error) {
-    if (error instanceof AppError) return Response.json({error:error.message},{status:error.status});
-    return Response.json({error:message(error)},{status:/authentication|LINE identity/.test(message(error))?401:/forbidden/.test(message(error))?403:400});
+    if (error instanceof AppError) return Response.json({error:publicMessage(error, request)},{status:error.status});
+    return Response.json({error:publicMessage(error, request)},{status:/authentication|LINE identity/.test(message(error))?401:/forbidden/.test(message(error))?403:400});
   }
 }
