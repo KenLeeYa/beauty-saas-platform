@@ -89,10 +89,16 @@ function formatVariantMeta(name: string, durationMinutes: number, t: (key: strin
   return name.trim() === `${durationMinutes} 分鐘` ? duration : `${name} · ${duration}`;
 }
 
+class PublicBookingRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
 async function parseResponse<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as ApiEnvelope<T>;
   if (!response.ok || !payload.data) {
-    throw new Error(payload.error?.message ?? "系統暫時無法處理。");
+    throw new PublicBookingRequestError(payload.error?.message ?? "系統暫時無法處理。", response.status);
   }
   return payload.data;
 }
@@ -194,6 +200,19 @@ export function PublicBookingFlow({
     setTimeDialogOpen(false);
   }
 
+  function recoverExpiredSession(cause: unknown): boolean {
+    if (!(cause instanceof PublicBookingRequestError) || cause.status !== 401) return false;
+    // A rejected session needs a fresh challenge; retain contact and service drafts.
+    setSessionToken(null);
+    setTurnstileToken(localTurnstileBypass ? "local-test" : null);
+    setHold(null);
+    setPendingTime(null);
+    setAvailability(null);
+    setTimeDialogOpen(false);
+    setStep(3);
+    return true;
+  }
+
   async function ensureSession(signal: AbortSignal): Promise<string> {
     if (sessionToken) {
       return sessionToken;
@@ -254,6 +273,7 @@ export function PublicBookingFlow({
       setPendingTime(current => result.slots.some(slot => slot.startsAt === current) ? current : null);
     } catch (cause) {
       if (controller.signal.aborted) return;
+      recoverExpiredSession(cause);
       setAvailability(null);
       setError(
         signal.aborted ? "時段查詢失敗。" : cause instanceof Error ? cause.message : "時段查詢失敗。",
@@ -293,7 +313,7 @@ export function PublicBookingFlow({
       setTimeDialogOpen(false);
       setStep(4);
     } catch (cause) {
-      await loadAvailability(selectedDate);
+      if (!recoverExpiredSession(cause)) await loadAvailability(selectedDate);
       setError(
         cause instanceof Error ? cause.message : "時段保留失敗。",
       );
@@ -331,6 +351,7 @@ export function PublicBookingFlow({
       );
       return true;
     } catch (cause) {
+      recoverExpiredSession(cause);
       setError(
         cause instanceof Error
           ? cause.message
@@ -439,6 +460,7 @@ export function PublicBookingFlow({
       }>(response);
       router.push(`/booking/${encodeURIComponent(result.trackingToken)}`);
     } catch (cause) {
+      recoverExpiredSession(cause);
       setError(
         cause instanceof Error ? cause.message : "預約確認失敗。",
       );

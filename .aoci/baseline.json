@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-10-08T10:43:30Z",
-  "updated_at": "2026-10-28T12:43:11Z",
+  "updated_at": "2026-10-28T14:05:04Z",
   "files": {
     ".env.example": {
       "role": "index",
@@ -95,9 +95,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "93e02e81c54cdb6d033773e23b487f01fd598b659a555555a8ca915580cd0164",
-      "size": 309959,
-      "normalized_sha256": "93e02e81c54cdb6d033773e23b487f01fd598b659a555555a8ca915580cd0164"
+      "sha256": "18e528d909ffe02ea30bdd61bd28b214f7732f7912c3316a4d7c0f234d0399e4",
+      "size": 309999,
+      "normalized_sha256": "18e528d909ffe02ea30bdd61bd28b214f7732f7912c3316a4d7c0f234d0399e4"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -2055,9 +2055,9 @@
     },
     "src/components/public-booking-flow.tsx": {
       "role": "index",
-      "sha256": "e13092a3546678cad534cdefa46ca0900ed14df5cf32691af4ce6518913af476",
-      "size": 40843,
-      "normalized_sha256": "e13092a3546678cad534cdefa46ca0900ed14df5cf32691af4ce6518913af476"
+      "sha256": "7144fb30b2f0e3086fb536f1ffc06db89df9944029e3b626567987024433c07b",
+      "size": 41629,
+      "normalized_sha256": "7144fb30b2f0e3086fb536f1ffc06db89df9944029e3b626567987024433c07b"
     },
     "src/components/scope-selector.tsx": {
       "role": "index",
@@ -3453,9 +3453,9 @@
     },
     "tests/language-ui.integration.test.ts": {
       "role": "index",
-      "sha256": "e430ed8361e6de04cdf5ed5b98123af8c4fe8c5451f57c0259c36f259f037708",
-      "size": 53865,
-      "normalized_sha256": "e430ed8361e6de04cdf5ed5b98123af8c4fe8c5451f57c0259c36f259f037708"
+      "sha256": "2f4118d29712b0c4bd867f73c0d534ca50afbac1579b1dd3f0a20fbb9778bc0c",
+      "size": 56646,
+      "normalized_sha256": "2f4118d29712b0c4bd867f73c0d534ca50afbac1579b1dd3f0a20fbb9778bc0c"
     },
     "tests/line-booking-public-ui.integration.test.ts": {
       "role": "index",
