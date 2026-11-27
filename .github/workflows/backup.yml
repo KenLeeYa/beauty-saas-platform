@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      - run: scripts/database/export.sh
+      - run: sh scripts/database/export.sh
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           BACKUP_FILE: beauty-saas-${{ github.run_id }}.dump
